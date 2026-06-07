@@ -1,0 +1,24 @@
+# Linter config for the examples module.
+#
+# The core library is linted with the full `default: all` set (see
+# ../.golangci.yml). Example commands have different constraints — they print
+# to stdout, wrap errors loosely, and need a `replace` directive — so they use
+# golangci-lint's curated standard set plus a few high-signal extras instead.
+version: "2"
+
+run:
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - gosec
+    - misspell
+    - revive
+    - unconvert
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

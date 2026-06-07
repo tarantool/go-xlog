@@ -483,6 +483,38 @@ Full API docs:
 - **Compatibility:** validated against a frozen corpus of real files from
   Tarantool 2.11–3.8 (see [`testdata/README.md`](testdata/README.md)).
 
+## Testing
+
+```sh
+go test ./...                          # Unit + round-trip + compat tests.
+go test -tags tarantool ./internal/integration/...   # Live Tarantool (needs a binary).
+```
+
+A `Makefile` wraps the common tasks (`make help` lists them all):
+
+```sh
+make test              # Unit/round-trip/compat tests.
+make test-race         # With the race detector.
+make test-integration  # Live-Tarantool suite (tarantool build tag).
+make lint              # golangci-lint.
+make bench             # Benchmarks (BENCH=<regex> PKG=<pkg> to narrow).
+make fuzz              # Fuzz every target (FUZZTIME=10s to shorten).
+make ci                # Lint + tests, the pre-push gate.
+```
+
+The compatibility suite (`internal/compat`) replays the historical corpus; the
+integration suite (`internal/integration`, gated by the `tarantool` build tag)
+round-trips against a live instance. Fixture provenance and regeneration are
+documented in [`testdata/README.md`](testdata/README.md).
+
+## Examples
+
+[`examples/`](examples/) holds two runnable commands built on this library —
+`cat` and `play`, pure-Go reimplementations of `tt cat` and `tt play` that read
+and decode journal files without a Tarantool runtime. They live in their own
+module so their dependencies stay out of the core graph. See
+[`examples/README.md`](examples/README.md).
+
 ## Status
 
 Pre-1.0. The API may still shift before a tagged release. The on-disk format
