@@ -71,6 +71,7 @@ The packages are layered so you can drop in at the level you need:
 | --- | --- |
 | [`format`](#package-format) | Pure byte-level codec — `Meta`, `XRow`, `VClock`, encode/decode. No I/O. |
 | [`reader`](#package-reader) | Single-file forward cursor: row- and transaction-level iteration. |
+| [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
 
 ## Usage
@@ -177,6 +178,86 @@ the reader's lifetime, since the backing buffer outlives the cursor.
 read half of the verbatim-copy fast path (see
 [`pipe.CopyRaw`](#filtering-and-copying)).
 
+### Writing
+
+`writer` produces one well-formed file. `Create` writes to `<path>.inprogress`
+and atomically renames it to the final name on `Close`, so readers never observe
+a partial file. `NewWriter` writes to any `io.Writer` (e.g. a `bytes.Buffer`)
+without the rename dance.
+
+```go
+meta := &format.Meta{
+    Filetype:     format.FiletypeXLOG,
+    InstanceUUID: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+    VClock:       format.VClock{1: 0},
+}
+
+w, err := writer.Create("out.xlog", meta)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Accumulate rows into the pending tx, then commit them as one block:
+w.WriteRow(format.XRow{Type: iproto.IPROTO_INSERT, LSN: 1, BodyRaw: body1})
+w.WriteRow(format.XRow{Type: iproto.IPROTO_INSERT, LSN: 2, BodyRaw: body2})
+w.CommitTx()
+
+// Or write a whole transaction in one call:
+w.WriteTx([]format.XRow{
+    {Type: iproto.IPROTO_REPLACE, LSN: 3, BodyRaw: body3},
+})
+
+if err := w.Close(); err != nil { // EOF marker, fsync, atomic rename.
+    log.Fatal(err)
+}
+```
+
+`XRow` is passed and returned **by value** throughout the read/write API; slices
+(`[]format.XRow`) keep the read→write pipeline copy-free. The single-row
+`WriteRow`/`Next` pay only a small struct copy.
+
+Request types, IPROTO header/body keys, and flag bits come from
+[`github.com/tarantool/go-iproto`](https://github.com/tarantool/go-iproto) —
+`XRow.Type` is an `iproto.Type` and `XRow.Flags` an `iproto.Flag`, so you write
+`iproto.IPROTO_INSERT`, `iproto.IPROTO_FLAG_COMMIT`, etc. `format.TypeName`
+renders a type as a short string (`"INSERT"`).
+
+Transaction blocks larger than 2 KiB are zstd-compressed automatically (matching
+Tarantool's threshold and level). Use `Discard()` instead of `Close()` to
+abandon the `.inprogress` file without promoting it.
+
+**Writer options:**
+
+- `WithCompression(format.Compression{...})` — set the block compression policy:
+  `Disabled` (never compress), `Level` (zstd level, default 3), `Threshold` (min
+  payload bytes to compress, default 2 KiB). `NoCompression()` is sugar for
+  `Disabled: true`.
+- `Version(s string)` — set `Meta.Version` if the caller left it blank.
+- `Sync(mode)` — `SyncNormal` (default, `fsync` on close), `SyncNone` (no sync),
+  or `SyncDataSync` (`fdatasync` on Linux). Call `Sync()` explicitly any time to
+  flush mid-stream.
+
+#### Packing many transactions per block (caching dumper)
+
+`WriteRow`/`WriteTx` emit one logical transaction per call. To pack many
+independent transactions into one compressed block — the shape Tarantool's own
+xlog uses (e.g. ~50 single-row autocommit txs per `ZRowMarker` block) — use
+`WriteBlock` (one physical block, rows' own TSN/commit flags delimit the
+transactions inside) or the higher-level `BatchWriter`, which buffers whole
+transactions and flushes a block when a `MaxTxs`/`MaxBytes` threshold trips:
+
+```go
+bw := writer.NewBatchWriter(w, writer.BatchOptions{MaxTxs: 50})
+for _, tx := range incoming {
+    if err := bw.WriteTx(tx.Rows); err != nil { log.Fatal(err) }
+}
+bw.Close() // Flushes the final block.
+```
+
+`BatchWriter` encodes each transaction eagerly, so it never retains the caller's
+rows — you can feed it rows straight from a `WithAliasBodies()` reader with no
+cloning.
+
 ## Performance
 
 The library is built for high-throughput reading, repacking, and dumping:
@@ -190,6 +271,11 @@ The library is built for high-throughput reading, repacking, and dumping:
   the buffer end-to-end.
 - **Hardware CRC32C** — checksums use the CPU's Castagnoli instructions via the
   standard library's accelerated path.
+- **Batched compression** — `BatchWriter` packs many transactions into one zstd
+  block; the level/threshold are tunable via `WithCompression`.
+- **Zero-clone pipeline** — value-semantics `XRow` plus eager-encoding
+  `BatchWriter` let rows flow from a `WithAliasBodies` reader to the writer
+  without any cloning.
 
 ## Package reference
 
@@ -212,6 +298,13 @@ Single-file, forward-only cursor.
 `Next`, `NextTx`, `Rows`, `Txs`, and `Close` drive it.
 `Scan`/`ScanTx`/`Row`/`Tx`/`Err`/`Recycle` are the zero-allocation cursor;
 `NextBlockRaw` reads physical blocks verbatim.
+
+### Package `writer`
+
+Single-file, write-once cursor that produces an atomically-finalized file.
+`Create`/`NewWriter` construct it; `WriteRow`, `CommitTx`, `WriteTx`, `Sync`,
+`Close`, and `Discard` drive it. `WriteBlock` and `BatchWriter` pack many
+transactions per block; `WriteRawBlock` writes a pre-framed block verbatim.
 
 ### Package `filter`
 

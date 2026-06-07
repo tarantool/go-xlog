@@ -26,6 +26,9 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 - reader: `OpenAt` (resume reading at a prior block-boundary offset), `Offset`
   (the current resume offset), and `SawEOFMarker` (whether the file is
   finalised).
+- writer: Single-file write-once cursor with atomic finalize, a `BatchWriter`
+  that packs many transactions into one zstd block, tunable compression via
+  `WithCompression`, and `WriteRawBlock` for verbatim block forwarding.
 
 ### Changed
 
