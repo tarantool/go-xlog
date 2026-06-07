@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: static (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both OSes so build-tagged files (e.g. sync_linux.go vs sync_other.go)
+        # are vetted/linted on the platform that actually compiles them.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      # --- checks that must not change the repo ---
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "::error::these files are not gofmt-clean:"; echo "$out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go generate (no changes)
+        run: |
+          go generate ./...
+          git diff --exit-code
+
+      - name: go fix (no changes)
+        run: |
+          go fix ./...
+          git diff --exit-code
+
+      - name: go mod tidy (no changes)
+        run: go mod tidy -diff
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.4
+
+      # --- examples module (separate go.mod) ---
+
+      - name: examples — go vet
+        working-directory: examples
+        run: go vet ./...
+
+      - name: examples — go fix (no changes)
+        working-directory: examples
+        run: |
+          go fix ./...
+          git diff --exit-code
+
+      - name: examples — go mod tidy (no changes)
+        working-directory: examples
+        run: go mod tidy -diff
+
+      - name: examples — golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.4
+          working-directory: examples
+
+  test:
+    name: test (${{ matrix.os }}, go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.24', '1.26']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      # Tarantool powers the integration recovery tests; they skip when it is
+      # absent, so a failed install never breaks the build (continue-on-error).
+      - name: Install Tarantool (Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          curl -fsSL https://www.tarantool.io/release/3/installer.sh | sudo bash
+          sudo apt-get install -y tarantool
+
+      - name: Install Tarantool (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: brew install tarantool
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (race)
+        run: go test -race ./...
+
+      - name: Build examples
+        working-directory: examples
+        run: go build ./...
