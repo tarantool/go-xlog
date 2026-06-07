@@ -1,0 +1,5 @@
+{
+  "format_version": "0.13",
+  "must_row_types": ["INSERT", "REPLACE", "UPDATE", "DELETE", "UPSERT", "RAFT", "RAFT_PROMOTE", "CONFIRM"],
+  "must_file_types": ["XLOG", "SNAP", "VYLOG", "RUN", "INDEX"]
+}
