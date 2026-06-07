@@ -32,6 +32,8 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 - tools: Meta-only rewrites that preserve payload bytes and CRCs.
 - dir: Immutable in-memory index of a journal directory; locate files by LSN
   and vclock.
+- pipe: Stream filtered transactions from a reader to a writer, including the
+  verbatim `CopyRaw` fast path.
 
 ### Changed
 

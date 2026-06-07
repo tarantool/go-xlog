@@ -74,6 +74,7 @@ The packages are layered so you can drop in at the level you need:
 | [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
 | [`dir`](#package-dir) | Immutable in-memory index of a journal directory; locate files by LSN/vclock. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
+| [`pipe`](#package-pipe) | Stream filtered transactions from a reader to a writer. |
 | [`tools`](#package-tools) | Meta-only rewrites that preserve payload bytes and CRCs. |
 
 ## Usage
@@ -260,6 +261,43 @@ bw.Close() // Flushes the final block.
 rows — you can feed it rows straight from a `WithAliasBodies()` reader with no
 cloning.
 
+### Filtering and copying
+
+`pipe.Copy` streams transactions from a reader to a writer, applying optional
+`filter` predicates. Filtering is **transaction-aware**: if any row in a
+transaction matches, the whole transaction is written; otherwise it is dropped.
+Partial transactions are never emitted.
+
+```go
+src, _ := reader.Open("in.xlog")
+defer src.Close()
+
+dst, _ := writer.Create("out.xlog", src.Meta().Clone())
+defer dst.Close()
+
+// Keep only DML from replica 1 with LSN in [101, +∞):
+keep := filter.And(
+    filter.ReplicaIDs(1),
+    filter.Types(iproto.IPROTO_INSERT, iproto.IPROTO_REPLACE, iproto.IPROTO_UPDATE, iproto.IPROTO_DELETE),
+    filter.LSNRange(1, 101, math.MaxInt64),
+)
+
+rows, err := pipe.Copy(src, dst, keep)
+```
+
+Filter constructors compose with `And`, `Or`, `Not`: `FromVClock`,
+`UntilVClock`, `ReplicaIDs`, `Types`, `LSNRange`. Predicates are read-only —
+they must never mutate the row.
+
+For a pure copy or truncate where rows are **not** transformed, `pipe.CopyRaw`
+forwards each physical block's on-disk bytes verbatim — no row decode, no
+re-encode, no recompression, no second CRC. A compressed block stays compressed
+on disk. It is dramatically faster than `Copy` but cannot filter (filtering
+needs row-level decoding).
+
+```go
+blocks, err := pipe.CopyRaw(src, dst) // Verbatim block-for-block copy.
+```
 ### Rewriting metadata
 
 `tools.RewriteMeta` rewrites only the text header and byte-copies every
@@ -294,6 +332,10 @@ The library is built for high-throughput reading, repacking, and dumping:
   `NewReaderBytes` slice transaction blocks straight out of the backing buffer,
   eliminating the per-block copy and read syscalls; uncompressed bodies alias
   the buffer end-to-end.
+- **Verbatim repack** — `pipe.CopyRaw` / `reader.NextBlockRaw` /
+  `writer.WriteRawBlock` forward whole blocks byte-for-byte, skipping decode,
+  re-encode, recompression, and the second CRC — far faster than a decoding copy
+  for unfiltered copies.
 - **Hardware CRC32C** — checksums use the CPU's Castagnoli instructions via the
   standard library's accelerated path.
 - **Batched compression** — `BatchWriter` packs many transactions into one zstd
@@ -339,6 +381,12 @@ Immutable in-memory index of a journal directory, with `LocateLSN` /
 ### Package `filter`
 
 Composable, read-only row predicates for use with `pipe.Copy`.
+
+### Package `pipe`
+
+`Copy` — transaction-aware streaming from a reader to a writer with optional
+filters. `CopyRaw` — verbatim block-for-block copy (no decode/re-encode), for
+unfiltered copy/truncate.
 
 ### Package `tools`
 
