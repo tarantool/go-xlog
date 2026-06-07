@@ -74,6 +74,7 @@ The packages are layered so you can drop in at the level you need:
 | [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
 | [`rotate`](#package-rotate) | Directory-aware writer that rotates files by size and threads vclocks. |
 | [`dir`](#package-dir) | Immutable in-memory index of a journal directory; locate files by LSN/vclock. |
+| [`follow`](#package-follow) | Tail a live file or a rotating directory — block for appended rows, switch files on rotation. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
 | [`pipe`](#package-pipe) | Stream filtered transactions from a reader to a writer. |
 | [`tools`](#package-tools) | Meta-only rewrites that preserve payload bytes and CRCs. |
@@ -428,6 +429,29 @@ size.
 
 Immutable in-memory index of a journal directory, with `LocateLSN` /
 `LocateVClock` lookups.
+
+### Package `follow`
+
+Tail journals as they are written — the read-side counterpart to
+`writer`/`rotate`. `follow.File` blocks for rows appended to one file and ends
+when the file is finalised (its EOF marker appears); `follow.Dir` reads a
+rotation chain and switches to the next file when the current one finalises,
+validating chain continuity. Both are `iter.Seq2` iterators (with
+`FileTx`/`DirTx` transaction-level variants) cancellable via `context.Context`:
+
+```go
+for row, err := range follow.Dir(ctx, walDir, format.FiletypeXLOG, follow.WithFromHead()) {
+    if err != nil { return err }
+    // ... process row as the writer appends it ...
+}
+```
+
+A directory follow requires a start position (`WithFromHead` / `WithStartLSN` /
+`WithStartVClock`). Growth is observed by polling by default (no extra
+dependency, configurable via `WithPollInterval`); supply your own `WithWatcher`
+to plug in event-based watching. `WithReadInprogress` tails the active
+`.inprogress` file for lower latency. For checkpointing across restarts, the
+`Follower` type exposes `Offset()`.
 
 ### Package `filter`
 
