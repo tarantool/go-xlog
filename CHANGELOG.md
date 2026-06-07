@@ -30,6 +30,8 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   that packs many transactions into one zstd block, tunable compression via
   `WithCompression`, and `WriteRawBlock` for verbatim block forwarding.
 - tools: Meta-only rewrites that preserve payload bytes and CRCs.
+- dir: Immutable in-memory index of a journal directory; locate files by LSN
+  and vclock.
 
 ### Changed
 
