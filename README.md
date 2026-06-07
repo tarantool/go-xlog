@@ -73,6 +73,7 @@ The packages are layered so you can drop in at the level you need:
 | [`reader`](#package-reader) | Single-file forward cursor: row- and transaction-level iteration. |
 | [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
+| [`tools`](#package-tools) | Meta-only rewrites that preserve payload bytes and CRCs. |
 
 ## Usage
 
@@ -258,6 +259,29 @@ bw.Close() // Flushes the final block.
 rows — you can feed it rows straight from a `WithAliasBodies()` reader with no
 cloning.
 
+### Rewriting metadata
+
+`tools.RewriteMeta` rewrites only the text header and byte-copies every
+transaction block verbatim, so CRCs and compressed payloads are preserved
+exactly. This is the safe way to fix up UUIDs or remap replica IDs in an
+existing file.
+
+```go
+// Replace the instance UUID, leaving all rows untouched:
+err := tools.RewriteMeta("in.xlog", "out.xlog",
+    tools.ReplaceInstanceUUID(uuid.MustParse("22222222-2222-2222-2222-222222222222")))
+
+// Remap replica IDs in the vclock (old → new):
+err = tools.RewriteMeta("in.xlog", "out.xlog",
+    tools.RemapVClock(map[uint32]uint32{1: 5}))
+
+// Or supply an arbitrary transform:
+err = tools.RewriteMeta("in.xlog", "out.xlog", func(m *format.Meta) *format.Meta {
+    m.PrevVClock = format.VClock{1: 100}
+    return m
+})
+```
+
 ## Performance
 
 The library is built for high-throughput reading, repacking, and dumping:
@@ -309,6 +333,11 @@ transactions per block; `WriteRawBlock` writes a pre-framed block verbatim.
 ### Package `filter`
 
 Composable, read-only row predicates for use with `pipe.Copy`.
+
+### Package `tools`
+
+Meta-only rewrites (`RewriteMeta`, `ReplaceInstanceUUID`, `RemapVClock`) that
+preserve payload bytes and CRCs.
 
 Full API docs:
 [pkg.go.dev/github.com/tarantool/go-xlog](https://pkg.go.dev/github.com/tarantool/go-xlog).

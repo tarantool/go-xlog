@@ -29,6 +29,7 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 - writer: Single-file write-once cursor with atomic finalize, a `BatchWriter`
   that packs many transactions into one zstd block, tunable compression via
   `WithCompression`, and `WriteRawBlock` for verbatim block forwarding.
+- tools: Meta-only rewrites that preserve payload bytes and CRCs.
 
 ### Changed
 
