@@ -1,0 +1,4 @@
+meta filetype=RUN format=0.13 version="2.11.5-0-g12a9ceb870" instance=d95af6aa-56fa-420b-85cb-e61b04d2b5db vclock={} prev_vclock={} extras={}
+row lsn=21 replica=0 type=2 body=0x81219201a576696e2d61
+row lsn=22 replica=0 type=2 body=0x81219202a576696e2d62
+row lsn=0 replica=0 type=102 body=0x8101c408000000000000000f

@@ -1,0 +1,6 @@
+meta filetype=VYLOG format=0.13 version="2.11.5-0-g12a9ceb870" instance=d95af6aa-56fa-420b-85cb-e61b04d2b5db vclock={0:1,1:21} prev_vclock={} extras={}
+row lsn=0 replica=0 type=2 vylog rectype=0 keys={33:0x92008506cd0202079182a56669656c6400a474797065a8756e7369676e65640c140d140916}
+row lsn=0 replica=0 type=2 vylog rectype=0 keys={33:0x920583020209161001}
+row lsn=0 replica=0 type=2 vylog rectype=0 keys={33:0x9202810101}
+row lsn=0 replica=0 type=2 vylog rectype=0 keys={33:0x920883010102020803}
+row lsn=0 replica=0 type=2 vylog rectype=0 keys={33:[11,{}]}
