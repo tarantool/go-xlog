@@ -10,6 +10,25 @@ A pure-Go library for reading, writing, and rewriting
 (`.xlog`), snapshots (`.snap`), and vinyl logs (`.vylog`) — without linking the
 Tarantool C runtime.
 
+```go
+import "github.com/tarantool/go-xlog/reader"
+
+r, err := reader.Open("00000000000000000000.xlog")
+if err != nil {
+    log.Fatal(err)
+}
+defer r.Close()
+
+for tx, err := range r.Txs() {
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, row := range tx.Rows {
+        fmt.Printf("lsn=%d type=%d\n", row.LSN, row.Type)
+    }
+}
+```
+
 ## Why
 
 Tarantool stores its WAL and snapshots in a self-describing binary format: a
@@ -31,7 +50,7 @@ a frozen corpus of real files produced by Tarantool 2.11 through 3.8.
 go get github.com/tarantool/go-xlog
 ```
 
-Requires Go 1.24+.
+Requires Go 1.24+ (the reader exposes `iter.Seq2` range-over-func iterators).
 
 ## Concepts
 
@@ -51,12 +70,124 @@ The packages are layered so you can drop in at the level you need:
 | Package | Role |
 | --- | --- |
 | [`format`](#package-format) | Pure byte-level codec — `Meta`, `XRow`, `VClock`, encode/decode. No I/O. |
+| [`reader`](#package-reader) | Single-file forward cursor: row- and transaction-level iteration. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
+
+## Usage
+
+### Reading
+
+`reader` gives you a forward-only cursor over a single file. Open it depending
+on who owns the underlying stream and where the bytes live:
+
+```go
+r, err := reader.Open("data.xlog")                 // Reader owns the file.
+r, err := reader.OpenFS(fsys, "data.xlog")         // Read from an fs.FS.
+r, err := reader.NewReader(readSeeker)             // Caller owns the stream.
+r, err := reader.OpenMmap("data.xlog")             // Memory-mapped, zero-copy.
+r, err := reader.NewReaderBytes(buf)               // A journal already in memory.
+```
+
+Inspect the header via `Meta()`, then iterate at whichever granularity fits:
+
+```go
+r, _ := reader.Open("data.xlog")
+defer r.Close()
+
+meta := r.Meta()
+fmt.Println(meta.Filetype, meta.Version, meta.VClock)
+
+// Row at a time:
+for {
+    row, err := r.Next()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        log.Fatal(err)
+    }
+    // ... use row
+}
+
+// Or transaction at a time (rows grouped by TSN):
+for {
+    tx, err := r.NextTx()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("tx starting at lsn=%d, %d rows\n", tx.StartLSN, len(tx.Rows))
+}
+```
+
+Range-over-func equivalents, `Rows()` and `Txs()`, surface errors as the second
+loop variable:
+
+```go
+for row, err := range r.Rows() {
+    if err != nil { log.Fatal(err) }
+    // ...
+}
+```
+
+**Reader options:**
+
+- `SkipCorruptTx()` — on a CRC mismatch or unknown magic, scan forward to the
+  next valid block instead of erroring. For salvaging damaged files.
+- `IgnoreMissingEOF()` — treat a missing EOF marker as a clean end of stream.
+  Useful when tailing a file an instance is still writing.
+- `AcceptV012()` — accept the legacy `0.12` format-version line in the meta
+  header (the current format is `0.13`). The legacy `Server:` alias for the
+  `Instance:` UUID line is accepted regardless of this option.
+- `WithAliasBodies()` — let `Row().BodyRaw` alias the read buffer instead of
+  copying it (see the zero-allocation cursor below).
+
+Mid-stream failures map to sentinel errors you can test with `errors.Is`:
+`ErrTruncated`, `ErrCorruptCRC`, `ErrUnknownMagic`, `ErrTxTooLarge`,
+`ErrZeroLengthDecode`.
+
+#### Zero-allocation cursor
+
+For throughput-sensitive consumers, `Scan`/`ScanTx` decode rows into
+reader-owned scratch instead of allocating per row. `Row()` (and `Tx()`) return
+the current row(s); check `Err()` after the loop.
+
+```go
+for r.Scan() {
+    row := r.Row()
+    // ... use row
+}
+if err := r.Err(); err != nil { log.Fatal(err) }
+```
+
+By default each row's body is copied into a reader arena, so rows stay valid
+until you call `Recycle()` — accumulate a batch, process it, `Recycle()` to
+reclaim the arena, repeat. With `WithAliasBodies()` the body instead aliases the
+read buffer (valid only until the next `Scan`), for the fastest streaming path
+when you fully consume each row before advancing. Paired with
+`OpenMmap`/`NewReaderBytes`, aliased bodies are zero-copy *and* stay valid for
+the reader's lifetime, since the backing buffer outlives the cursor.
+
+#### Verbatim block access
+
+`NextBlockRaw()` returns the next physical transaction block's on-disk bytes
+(fixheader + payload) verbatim, CRC-verified, without decoding any rows — the
+read half of the verbatim-copy fast path (see
+[`pipe.CopyRaw`](#filtering-and-copying)).
 
 ## Performance
 
 The library is built for high-throughput reading, repacking, and dumping:
 
+- **Zero-allocation row cursor** — `Scan`/`ScanTx` decode into reader-owned
+  scratch; a steady-state loop allocates nothing per row. `WithAliasBodies`
+  removes the per-row body copy entirely.
+- **Zero-copy in-memory readers** — `OpenMmap` (memory-mapped) and
+  `NewReaderBytes` slice transaction blocks straight out of the backing buffer,
+  eliminating the per-block copy and read syscalls; uncompressed bodies alias
+  the buffer end-to-end.
 - **Hardware CRC32C** — checksums use the CPU's Castagnoli instructions via the
   standard library's accelerated path.
 
@@ -73,6 +204,14 @@ types — `Meta`, `XRow`, `VClock`, `Filetype` — and the encode/decode functio
 `VyKey*` vinyl-log body keys, and `TypeName`. Request types and IPROTO
 header/body keys and flags come from `github.com/tarantool/go-iproto`
 (`iproto.IPROTO_*`). Use it directly if you need to work below the cursor level.
+
+### Package `reader`
+
+Single-file, forward-only cursor.
+`Open`/`OpenFS`/`NewReader`/`OpenMmap`/`NewReaderBytes` construct it; `Meta`,
+`Next`, `NextTx`, `Rows`, `Txs`, and `Close` drive it.
+`Scan`/`ScanTx`/`Row`/`Tx`/`Err`/`Recycle` are the zero-allocation cursor;
+`NextBlockRaw` reads physical blocks verbatim.
 
 ### Package `filter`
 
