@@ -1,0 +1,109 @@
+name: Fuzz
+
+# Nightly fuzzing of every target on master, plus on-demand runs via the
+# Actions UI / `gh workflow run fuzz.yml`. On failure it opens a GitHub issue
+# and uploads the reproducer(s) `go test` wrote under testdata/fuzz/<Target>/.
+on:
+  schedule:
+    - cron: '0 2 * * *' # Every day at 02:00 UTC.
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: 'Per-target fuzz duration (go -fuzztime), e.g. 10m, 30s'
+        default: '10m'
+      fuzzmintime:
+        description: 'Per-target minimize duration (go -fuzzminimizetime)'
+        default: '20s'
+      pkg:
+        description: 'Package pattern to fuzz'
+        default: './...'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: fuzz (nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # 15 targets * 10m fuzztime + minimization + build.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Fuzz all targets
+        env:
+          FUZZTIME: ${{ inputs.fuzztime || '10m' }}
+          FUZZMINTIME: ${{ inputs.fuzzmintime || '20s' }}
+          PKG: ${{ inputs.pkg || './...' }}
+        run: make fuzz PKG="$PKG" FUZZTIME="$FUZZTIME" FUZZMINTIME="$FUZZMINTIME" 2>&1 | tee fuzz.log
+
+      # On a crash, `go test -fuzz` writes the minimized reproducer to
+      # testdata/fuzz/<Target>/<hash>. The runner is ephemeral, so collect any
+      # NEW (untracked) reproducer files plus the log into an artifact.
+      - name: Collect reproducers
+        if: failure()
+        run: |
+          mkdir -p fuzz-artifacts
+          cp fuzz.log fuzz-artifacts/ 2>/dev/null || true
+          git ls-files --others --exclude-standard \
+            | grep '/testdata/fuzz/' > fuzz-artifacts/new-reproducers.txt || true
+          if [ -s fuzz-artifacts/new-reproducers.txt ]; then
+            tar -czf fuzz-artifacts/reproducers.tar.gz -T fuzz-artifacts/new-reproducers.txt
+            echo "New reproducers:"; cat fuzz-artifacts/new-reproducers.txt
+          else
+            echo "No new reproducer files (failure may be a build/timeout, not a crash)."
+          fi
+
+      - name: Upload fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failure-${{ github.run_id }}
+          path: fuzz-artifacts/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "The nightly fuzz run on \`master\` failed."
+            echo
+            echo "Run: $run_url"
+            echo
+            echo "Reproducers (the minimized failing inputs \`go test\` wrote under"
+            echo "\`testdata/fuzz/<Target>/\`) are attached to the run as the"
+            echo "**fuzz-failure-${GITHUB_RUN_ID}** artifact — download it, drop the"
+            echo "files back under the matching \`testdata/fuzz/<Target>/\` path, and"
+            echo "\`go test\` will replay them as a regression case."
+            if [ -s fuzz-artifacts/new-reproducers.txt ]; then
+              echo
+              echo "Reproducer files:"
+              echo
+              echo '```'
+              cat fuzz-artifacts/new-reproducers.txt
+              echo '```'
+            fi
+            echo
+            echo '<details><summary>Tail of fuzz output</summary>'
+            echo
+            echo '```'
+            tail -c 50000 fuzz.log 2>/dev/null || echo "(no log captured)"
+            echo '```'
+            echo '</details>'
+          } > issue-body.md
+          gh issue create \
+            --title "Nightly fuzz failure — $(date -u +%Y-%m-%d)" \
+            --body-file issue-body.md
