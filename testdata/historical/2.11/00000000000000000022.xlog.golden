@@ -1,0 +1,3 @@
+meta filetype=XLOG format=0.13 version="2.11.5-0-g12a9ceb870" instance=d95af6aa-56fa-420b-85cb-e61b04d2b5db vclock={0:1,1:21} prev_vclock={} extras={}
+row lsn=22 replica=1 type=INSERT tsn=22 commit=true flags=0x01 group=0 ts=1.7802647587088072e+09 dml space=512 tuple=[200,"post-snap-1"]
+row lsn=23 replica=1 type=INSERT tsn=23 commit=true flags=0x01 group=0 ts=1.7802647587089643e+09 dml space=512 tuple=[201,"post-snap-2"]
