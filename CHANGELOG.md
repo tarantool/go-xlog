@@ -36,6 +36,15 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   vclocks across rotations.
 - pipe: Stream filtered transactions from a reader to a writer, including the
   verbatim `CopyRaw` fast path.
+- follow: Live tailing of journals. `follow.File` blocks for rows appended to a
+  single file and ends when it is finalised; `follow.Dir` follows a rotation
+  chain, switching to the next file on finalisation and validating chain
+  continuity. Both are `iter.Seq2` iterators (with `FileTx`/`DirTx` variants)
+  cancellable via `context.Context`, with a pluggable `Watcher` (default
+  polling, no new dependency), optional `WithReadInprogress` low-latency
+  tailing of the active `.inprogress` file, and a `Follower` type exposing
+  `Offset()` for restart checkpointing. Backed by `reader.OpenAt`,
+  `reader.Offset`, and `reader.SawEOFMarker`.
 
 ### Changed
 
