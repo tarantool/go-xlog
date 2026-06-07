@@ -16,6 +16,8 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   and mirrors the C implementation byte-for-byte (CRC32C/Castagnoli, msgpack
   row encoding, zstd compression threshold). File types `XLOG`, `SNAP`,
   `VYLOG`, `RUN`, and `INDEX`.
+- filter: Composable row predicates (`And`/`Or`/`Not`, by replica, type, and
+  LSN range).
 
 ### Changed
 

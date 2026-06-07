@@ -51,6 +51,7 @@ The packages are layered so you can drop in at the level you need:
 | Package | Role |
 | --- | --- |
 | [`format`](#package-format) | Pure byte-level codec — `Meta`, `XRow`, `VClock`, encode/decode. No I/O. |
+| [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
 
 ## Performance
 
@@ -72,6 +73,10 @@ types — `Meta`, `XRow`, `VClock`, `Filetype` — and the encode/decode functio
 `VyKey*` vinyl-log body keys, and `TypeName`. Request types and IPROTO
 header/body keys and flags come from `github.com/tarantool/go-iproto`
 (`iproto.IPROTO_*`). Use it directly if you need to work below the cursor level.
+
+### Package `filter`
+
+Composable, read-only row predicates for use with `pipe.Copy`.
 
 Full API docs:
 [pkg.go.dev/github.com/tarantool/go-xlog](https://pkg.go.dev/github.com/tarantool/go-xlog).
