@@ -72,6 +72,7 @@ The packages are layered so you can drop in at the level you need:
 | [`format`](#package-format) | Pure byte-level codec — `Meta`, `XRow`, `VClock`, encode/decode. No I/O. |
 | [`reader`](#package-reader) | Single-file forward cursor: row- and transaction-level iteration. |
 | [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
+| [`rotate`](#package-rotate) | Directory-aware writer that rotates files by size and threads vclocks. |
 | [`dir`](#package-dir) | Immutable in-memory index of a journal directory; locate files by LSN/vclock. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
 | [`pipe`](#package-pipe) | Stream filtered transactions from a reader to a writer. |
@@ -298,6 +299,51 @@ needs row-level decoding).
 ```go
 blocks, err := pipe.CopyRaw(src, dst) // Verbatim block-for-block copy.
 ```
+
+### Directories and rotation
+
+`rotate.RotatingWriter` writes a chain of files into a directory, rotating to a
+new file when the current one crosses a size threshold (default 64 MiB).
+Rotation only ever happens between transactions, and each new file's
+`PrevVClock` is set to the previous file's `VClock`.
+
+```go
+rw, err := rotate.New(
+    "/var/lib/tarantool/wal",
+    format.FiletypeXLOG,
+    instanceUUID,
+    format.VClock{1: 0},                 // Starting vclock.
+    rotate.MaxFileSize(128<<20),
+)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, tx := range incoming {
+    if err := rw.WriteTx(tx.Rows); err != nil {
+        log.Fatal(err)
+    }
+}
+rw.Close()
+```
+
+`dir.OpenDir` (or `OpenDirFS`) scans a directory and builds an immutable,
+ordered index of its files. Use it to find which file holds a given position:
+
+```go
+d, _ := dir.OpenDir("/var/lib/tarantool/wal", format.FiletypeXLOG)
+
+for _, e := range d.Files() {
+    fmt.Println(e.Path, e.VClock, e.Signature)
+}
+
+entry, err := d.LocateLSN(1, 4096)        // File containing replica 1's LSN 4096.
+entry, err = d.LocateVClock(format.VClock{1: 4096})
+```
+
+`FileEntry` exposes a lazily-opened `Reader`, so locating a position and reading
+from it is cheap.
+
 ### Rewriting metadata
 
 `tools.RewriteMeta` rewrites only the text header and byte-copies every
@@ -372,6 +418,11 @@ Single-file, write-once cursor that produces an atomically-finalized file.
 `Create`/`NewWriter` construct it; `WriteRow`, `CommitTx`, `WriteTx`, `Sync`,
 `Close`, and `Discard` drive it. `WriteBlock` and `BatchWriter` pack many
 transactions per block; `WriteRawBlock` writes a pre-framed block verbatim.
+
+### Package `rotate`
+
+Directory-aware writer producing a vclock-threaded chain of files, rotating by
+size.
 
 ### Package `dir`
 

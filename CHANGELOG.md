@@ -32,9 +32,19 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 - tools: Meta-only rewrites that preserve payload bytes and CRCs.
 - dir: Immutable in-memory index of a journal directory; locate files by LSN
   and vclock.
+- rotate: Directory-aware writer that rotates files by size and threads
+  vclocks across rotations.
 - pipe: Stream filtered transactions from a reader to a writer, including the
   verbatim `CopyRaw` fast path.
 
 ### Changed
 
 ### Fixed
+
+- writer/rotate/tools: fsync the parent directory after the `.inprogress` →
+  final atomic rename. Previously only the file contents were synced, so a
+  power loss could leave a "committed" segment stranded as `.inprogress` or
+  missing despite `Close`/`RewriteMeta` returning success. Affects every
+  `writer.Writer.Close`, every rotation, and `tools.RewriteMeta` (skipped
+  under `SyncNone`, which opts out of Close-time durability). New
+  `internal/durable.SyncDir` helper.
