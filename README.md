@@ -72,6 +72,7 @@ The packages are layered so you can drop in at the level you need:
 | [`format`](#package-format) | Pure byte-level codec — `Meta`, `XRow`, `VClock`, encode/decode. No I/O. |
 | [`reader`](#package-reader) | Single-file forward cursor: row- and transaction-level iteration. |
 | [`writer`](#package-writer) | Single-file write-once cursor with atomic finalize. |
+| [`dir`](#package-dir) | Immutable in-memory index of a journal directory; locate files by LSN/vclock. |
 | [`filter`](#package-filter) | Composable row predicates (`And`/`Or`/`Not`, by replica, type, LSN range). |
 | [`tools`](#package-tools) | Meta-only rewrites that preserve payload bytes and CRCs. |
 
@@ -329,6 +330,11 @@ Single-file, write-once cursor that produces an atomically-finalized file.
 `Create`/`NewWriter` construct it; `WriteRow`, `CommitTx`, `WriteTx`, `Sync`,
 `Close`, and `Discard` drive it. `WriteBlock` and `BatchWriter` pack many
 transactions per block; `WriteRawBlock` writes a pre-framed block verbatim.
+
+### Package `dir`
+
+Immutable in-memory index of a journal directory, with `LocateLSN` /
+`LocateVClock` lookups.
 
 ### Package `filter`
 
