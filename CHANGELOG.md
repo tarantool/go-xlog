@@ -10,6 +10,12 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Added
 
+- format: Pure byte-level codec for the Tarantool journal format — `Meta`,
+  `XRow`, `VClock`, and encode/decode helpers with no I/O. Format-faithful to
+  Tarantool 3.x (version `0.13`), reads legacy `0.12` with `AcceptV012()`,
+  and mirrors the C implementation byte-for-byte (CRC32C/Castagnoli, msgpack
+  row encoding, zstd compression threshold). File types `XLOG`, `SNAP`,
+  `VYLOG`, `RUN`, and `INDEX`.
 
 ### Changed
 
