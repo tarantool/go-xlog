@@ -1,0 +1,38 @@
+# Tarantool in-flight artefacts.
+*.inprogress
+*.snap.tmp.*
+*.xlog.tmp.*
+*.vylog.tmp.*
+
+# Test/scratch dirs.
+tmp/
+/tmp/
+
+# Tarantool leftovers from ad-hoc runs.
+*.snap.dirty
+*.xlog.dirty
+*.pid
+*.control
+*.sock
+tarantool.log
+*.log
+core
+core.*
+00000000000000000000.run
+00000000000000000000.index
+
+# Committed historical-compat corpus: never ignore its artefacts, even when a
+# signature-0 vinyl run/index or a log would otherwise match the rules above.
+!testdata/historical/**
+
+# Editor / OS junk.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go build artefacts.
+/bin/
+*.test
+*.out

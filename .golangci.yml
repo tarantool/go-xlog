@@ -1,0 +1,59 @@
+# golangci-lint v2 configuration.
+#
+# Starts from the full linter set (`default: all`) for maximum signal, then
+# disables a curated set that either needs project-specific policy we do not
+# define, or fights Go idiom / this codebase's nature (a binary-format library
+# with table-driven, white-box tests). Everything still enabled is treated as a
+# hard error to be fixed in code, not suppressed.
+#
+# Run locally with: golangci-lint run ./...
+version: "2"
+
+run:
+  # Lint test files too.
+  tests: true
+
+linters:
+  default: all
+  disable:
+    # --- need project-specific policy we intentionally do not define ---
+    - depguard # Needs an explicit import allow/deny policy (none defined).
+    - exhaustruct # Flags every partial struct literal project-wide; noise.
+
+    # --- superseded ---
+    - wsl # Replaced by wsl_v5 (enabled); avoids duplicate whitespace noise.
+
+    # --- fight Go idiom or are pure stylistic churn for this codebase ---
+    - varnamelen # Idiomatic short names (err, r, w, tx, i, n) are deliberate.
+    - noinlineerr # `if err := f(); err != nil` is canonical Go.
+    - gochecknoglobals # Sentinel errors, sync.Pools, CRC tables, format markers.
+    - lll # The long lines are test tables and doc comments.
+
+    # --- inappropriate for a binary-format decoder / its test suite ---
+    - cyclop # Protocol decoders are inherently branchy switch statements.
+    - gocognit # Same rationale as cyclop.
+    - gocyclo # Same rationale as cyclop.
+    - funlen # Decoder/encoder functions are long but linear; splitting hurts clarity.
+    - tagliatelle # snake_case JSON tags match the on-disk manifest format.
+    - exhaustive # Switches over iproto.Type/iproto.Key handle the journal's subset + default; enumerating all ~60 IPROTO request types is noise.
+
+  settings:
+    gosec:
+      excludes:
+        # A file-format library opens caller-supplied paths by design.
+        - G304
+
+  exclusions:
+    # Don't fail on findings in machine-generated files.
+    generated: lax
+    rules:
+      # Test fixtures intentionally trip gosec checks (e.g. G115 integer overflow
+      # on synthesised values, G306 file permissions); disable gosec in tests.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
