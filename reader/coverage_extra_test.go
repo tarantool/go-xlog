@@ -154,6 +154,7 @@ func TestOpenMmap_RowsAndClose(t *testing.T) {
 	require.NoError(t, err)
 
 	n := 0
+
 	for _, err := range r.Rows() {
 		require.NoError(t, err)
 
@@ -339,6 +340,7 @@ func TestNextBlockRaw_CompressedBlock(t *testing.T) {
 		var magic [4]byte
 
 		copy(magic[:], block[:format.MarkerSize])
+
 		if magic == format.ZRowMarker {
 			sawZRow = true
 		}
@@ -573,6 +575,7 @@ func TestOpenMmap_AcceptV012(t *testing.T) {
 	assert.Equal(t, format.LegacyFormatVersion, r.Meta().FormatVer)
 
 	n := 0
+
 	for _, err := range r.Rows() {
 		require.NoError(t, err)
 
@@ -680,6 +683,7 @@ func TestNextBlockRaw_CompressedStreaming(t *testing.T) {
 		var magic [4]byte
 
 		copy(magic[:], block[:format.MarkerSize])
+
 		if magic == format.ZRowMarker {
 			zrows++
 		}
@@ -941,7 +945,7 @@ func TestOpenAt_WithOption(t *testing.T) {
 	writeFinalXlog(t, path, []int64{1, 2})
 
 	// Drop the EOF marker on disk so IgnoreMissingEOF is actually meaningful.
-	raw, err := os.ReadFile(path) //nolint:gosec // test temp path
+	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, raw[:len(raw)-format.MarkerSize], 0o600))
 
@@ -1069,11 +1073,11 @@ func (e *errAfterReader) Seek(offset int64, whence int) (int64, error) {
 	return int64(e.pos), nil
 }
 
-var errInjected = errInjectedType{}
+var errInjected = injectedTypeError{}
 
-type errInjectedType struct{}
+type injectedTypeError struct{}
 
-func (errInjectedType) Error() string { return "injected read failure" }
+func (injectedTypeError) Error() string { return "injected read failure" }
 
 // metaLen returns the byte length of the meta header (offset of the first block).
 func metaLen(t *testing.T, data []byte) int {
@@ -1169,7 +1173,7 @@ func TestScan_PropagatesCorruptError(t *testing.T) {
 	r, err := reader.NewReaderBytes(corrupt)
 	require.NoError(t, err)
 
-	for r.Scan() { //nolint:revive // drain until the error stops it
+	for r.Scan() {
 	}
 
 	require.ErrorIs(t, r.Err(), reader.ErrCorruptCRC)
@@ -1190,7 +1194,7 @@ func TestScanTx_PropagatesCorruptError(t *testing.T) {
 	r, err := reader.NewReaderBytes(corrupt)
 	require.NoError(t, err)
 
-	for r.ScanTx() { //nolint:revive // drain
+	for r.ScanTx() {
 	}
 
 	require.ErrorIs(t, r.Err(), reader.ErrCorruptCRC)

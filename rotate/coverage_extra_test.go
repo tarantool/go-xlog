@@ -4,7 +4,6 @@ package rotate_test
 // uncovered branches in rotate.go and options.go.
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +49,7 @@ func TestWriterOptions_NoCompression(t *testing.T) {
 
 	rd, err := reader.Open(d.Files()[0].Path)
 	require.NoError(t, err, "reader.Open")
+
 	defer func() { _ = rd.Close() }()
 
 	tx, err := rd.NextTx()
@@ -79,6 +79,7 @@ func TestWriterOptions_SyncNone(t *testing.T) {
 	for lsn := int64(1); lsn <= 4; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 100)}), "WriteTx lsn=%d", lsn)
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	d, err := dir.OpenDir(tmp, format.FiletypeXLOG)
@@ -169,10 +170,10 @@ func TestWriteTx_EmptyRows(t *testing.T) {
 	require.NoError(t, err, "New")
 
 	err = rw.WriteTx(nil)
-	assert.True(t, errors.Is(err, rotate.ErrEmptyRows), "expected ErrEmptyRows, got %v", err)
+	require.ErrorIs(t, err, rotate.ErrEmptyRows, "expected ErrEmptyRows, got %v", err)
 
 	err = rw.WriteTx([]format.XRow{})
-	assert.True(t, errors.Is(err, rotate.ErrEmptyRows), "expected ErrEmptyRows for empty slice, got %v", err)
+	require.ErrorIs(t, err, rotate.ErrEmptyRows, "expected ErrEmptyRows for empty slice, got %v", err)
 
 	require.NoError(t, rw.Close(), "Close after empty-rows errors")
 }
@@ -187,7 +188,7 @@ func TestWriteTx_AfterClose(t *testing.T) {
 	require.NoError(t, rw.Close(), "Close")
 
 	err = rw.WriteTx([]format.XRow{makeRow(1, 50)})
-	assert.True(t, errors.Is(err, rotate.ErrClosed), "expected ErrClosed, got %v", err)
+	assert.ErrorIs(t, err, rotate.ErrClosed, "expected ErrClosed, got %v", err)
 }
 
 // TestWriteTx_RotateFailsOnCreate — when a rotation is triggered but the
@@ -235,7 +236,7 @@ func TestClose_DoubleClose(t *testing.T) {
 	require.NoError(t, rw.Close(), "first Close")
 
 	err = rw.Close()
-	assert.True(t, errors.Is(err, rotate.ErrClosed), "second Close: expected ErrClosed, got %v", err)
+	assert.ErrorIs(t, err, rotate.ErrClosed, "second Close: expected ErrClosed, got %v", err)
 }
 
 // TestClose_NoWrites — Close on a writer that was opened but never written
@@ -268,6 +269,7 @@ func TestRotate_ExactBoundary(t *testing.T) {
 	// Use a threshold equal to the estimate of one row so that after the
 	// first WriteTx, curBytes >= maxFileSize and the second tx forces a rotation.
 	const rowBody = 20
+
 	const threshold = 30 + rowBody // rowHeaderEstimateBytes + bodySize
 
 	rw, err := rotate.New(tmp, format.FiletypeXLOG, testInstance, format.VClock{},
@@ -299,6 +301,7 @@ func TestRotate_MultipleRotations(t *testing.T) {
 	for lsn := int64(1); lsn <= total; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 100)}), "WriteTx lsn=%d", lsn)
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	d, err := dir.OpenDir(tmp, format.FiletypeXLOG)
@@ -316,6 +319,7 @@ func TestRotate_MultipleRotations(t *testing.T) {
 
 	// Collect all LSNs read back and verify each is present exactly once.
 	seen := make(map[int64]bool)
+
 	for _, f := range files {
 		rd, err := reader.Open(f.Path)
 		require.NoError(t, err, "reader.Open %s", f.Path)
@@ -331,6 +335,7 @@ func TestRotate_MultipleRotations(t *testing.T) {
 				seen[r.LSN] = true
 			}
 		}
+
 		_ = rd.Close()
 	}
 
@@ -354,6 +359,7 @@ func TestRotate_WithNonEmptyStartVClock(t *testing.T) {
 	for lsn := int64(101); lsn <= 104; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 100)}))
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	d, err := dir.OpenDir(tmp, format.FiletypeXLOG)
@@ -362,7 +368,7 @@ func TestRotate_WithNonEmptyStartVClock(t *testing.T) {
 
 	// First file's PrevVClock must be empty (it is the head of chain).
 	first := d.Files()[0]
-	assert.Equal(t, 0, len(first.PrevVClock), "first file PrevVClock should be empty")
+	assert.Empty(t, first.PrevVClock, "first file PrevVClock should be empty")
 
 	// First file's VClock signature must be 150 (sum of 100+50).
 	assert.Equal(t, int64(150), first.VClock.Signature(), "first file VClock signature")
@@ -383,6 +389,7 @@ func TestRotate_InstanceUUID(t *testing.T) {
 	for lsn := int64(1); lsn <= 6; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 100)}))
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	d, err := dir.OpenDir(tmp, format.FiletypeXLOG)
@@ -410,6 +417,7 @@ func TestRotate_ShouldNotRotateWhenUnderThreshold(t *testing.T) {
 	for lsn := int64(1); lsn <= 5; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 50)}))
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	d, err := dir.OpenDir(tmp, format.FiletypeXLOG)
@@ -492,7 +500,7 @@ func TestWriteTx_ErrClosedIsWrapped(t *testing.T) {
 	err = rw.WriteTx([]format.XRow{makeRow(1, 10)})
 	require.Error(t, err)
 	// The error must unwrap to rotate.ErrClosed.
-	assert.True(t, errors.Is(err, rotate.ErrClosed),
+	assert.ErrorIs(t, err, rotate.ErrClosed,
 		"expected errors.Is(err, ErrClosed); got %v", err)
 }
 
@@ -508,7 +516,7 @@ func TestClose_ErrClosedIsWrapped(t *testing.T) {
 
 	err = rw.Close()
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, rotate.ErrClosed),
+	assert.ErrorIs(t, err, rotate.ErrClosed,
 		"second Close: expected errors.Is(err, ErrClosed); got %v", err)
 }
 
@@ -564,11 +572,13 @@ func TestRotate_SnapFiletypeMultipleFiles(t *testing.T) {
 	for lsn := int64(1); lsn <= 6; lsn++ {
 		require.NoError(t, rw.WriteTx([]format.XRow{makeRow(lsn, 80)}))
 	}
+
 	require.NoError(t, rw.Close(), "Close")
 
 	// All files must have .snap extension.
 	entries, err := os.ReadDir(tmp)
 	require.NoError(t, err)
+
 	for _, e := range entries {
 		name := e.Name()
 		assert.True(t,
@@ -586,8 +596,8 @@ func TestRotate_SnapFiletypeMultipleFiles(t *testing.T) {
 func TestSentinelErrors(t *testing.T) {
 	t.Parallel()
 
-	require.NotNil(t, rotate.ErrClosed)
-	require.NotNil(t, rotate.ErrEmptyRows)
+	require.Error(t, rotate.ErrClosed)
+	require.Error(t, rotate.ErrEmptyRows)
 	require.NotEqual(t, rotate.ErrClosed, rotate.ErrEmptyRows)
 
 	// Sentinel strings should be human-readable.
@@ -595,6 +605,6 @@ func TestSentinelErrors(t *testing.T) {
 	assert.NotEmpty(t, rotate.ErrEmptyRows.Error())
 
 	// ErrNoActiveWriter is also exported.
-	require.NotNil(t, rotate.ErrNoActiveWriter)
+	require.Error(t, rotate.ErrNoActiveWriter)
 	assert.NotEmpty(t, fmt.Sprintf("%v", rotate.ErrNoActiveWriter))
 }

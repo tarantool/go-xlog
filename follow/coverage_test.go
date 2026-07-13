@@ -2,6 +2,7 @@ package follow_test
 
 import (
 	"context"
+	"fmt"
 	"iter"
 	"sync"
 	"testing"
@@ -85,8 +86,7 @@ func TestFileTx(t *testing.T) {
 	path := t.TempDir() + "/live.xlog"
 	lw := newLiveWriter(t, path)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	c := collectTxs(follow.FileTx(ctx, path, fastPoll()))
 
@@ -163,6 +163,7 @@ func TestNewDirFollower(t *testing.T) {
 	writeChainFile(t, dirPath, format.VClock{1: 2}, format.VClock{1: 1}, 2)
 
 	f := follow.NewDirFollower(dirPath, format.FiletypeXLOG, follow.WithFromHead(), fastPoll())
+
 	defer func() { _ = f.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -194,7 +195,7 @@ func (w *countingWatcher) Wait(ctx context.Context, _ string) error {
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("countingWatcher: %w", ctx.Err())
 	case <-time.After(5 * time.Millisecond):
 		return nil
 	}
@@ -217,8 +218,7 @@ func TestWithWatcherAndReaderOptions(t *testing.T) {
 
 	w := &countingWatcher{}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	c := collectRows(follow.File(ctx, path,
 		follow.WithWatcher(w),

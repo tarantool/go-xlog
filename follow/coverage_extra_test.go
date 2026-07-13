@@ -67,6 +67,7 @@ func buildNonCommitFile(t *testing.T, path string) {
 
 	f, err := os.Create(path)
 	require.NoError(t, err)
+
 	defer func() { require.NoError(t, f.Close()) }()
 
 	w, err := writer.NewWriter(f, metaWith(format.VClock{1: 0}, nil))
@@ -395,6 +396,7 @@ func TestFileFollower_IOEOFOnFinalized(t *testing.T) {
 	lw.finalize(t)
 
 	f := follow.NewFileFollower(path, fastPoll())
+
 	defer func() { _ = f.Close() }()
 
 	ctx := t.Context()
@@ -588,6 +590,7 @@ func TestDirFollower_OffsetAndRotation(t *testing.T) {
 
 	f := follow.NewDirFollower(dirPath, format.FiletypeXLOG,
 		follow.WithFromHead(), fastPoll())
+
 	defer func() { _ = f.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

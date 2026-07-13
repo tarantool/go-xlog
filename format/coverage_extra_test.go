@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"testing"
 
@@ -22,7 +23,12 @@ func mpFixmap(n int) []byte {
 
 // decodeMetaString feeds a literal meta blob through DecodeMeta.
 func decodeMetaString(s string) (*format.Meta, error) {
-	return format.DecodeMeta(bufio.NewReader(bytes.NewReader([]byte(s))), format.MetaOptions{})
+	meta, err := format.DecodeMeta(bufio.NewReader(bytes.NewReader([]byte(s))), format.MetaOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("decode meta: %w", err)
+	}
+
+	return meta, nil
 }
 
 // mpUint encodes a uint with the smallest width, mirroring mp_encode_uint.
@@ -35,14 +41,17 @@ func mpUint(n uint64) []byte {
 	case n <= math.MaxUint16:
 		b := []byte{0xcd, 0, 0}
 		binary.BigEndian.PutUint16(b[1:], uint16(n))
+
 		return b
 	case n <= math.MaxUint32:
 		b := []byte{0xce, 0, 0, 0, 0}
 		binary.BigEndian.PutUint32(b[1:], uint32(n))
+
 		return b
 	default:
 		b := []byte{0xcf, 0, 0, 0, 0, 0, 0, 0, 0}
 		binary.BigEndian.PutUint64(b[1:], n)
+
 		return b
 	}
 }
@@ -50,6 +59,7 @@ func mpUint(n uint64) []byte {
 func mpFloat32(f float32) []byte {
 	b := []byte{0xca, 0, 0, 0, 0}
 	binary.BigEndian.PutUint32(b[1:], math.Float32bits(f))
+
 	return b
 }
 
@@ -73,7 +83,8 @@ func TestDecodeRaftBody_AllKeys(t *testing.T) {
 	// VCLOCK nested map {1: 100, 2: 200}.
 	vclock := buildMap(2, append(kv(1, mpUint(100)), kv(2, mpUint(200))...))
 
-	var body []byte
+	body := make([]byte, 0, 64)
+
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_TERM), mpUint(5))...)
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_VOTE), mpUint(3))...)
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_STATE), mpUint(2))...)
@@ -110,12 +121,14 @@ func TestDecodeRaftBody_Errors(t *testing.T) {
 
 	t.Run("empty body", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeRaftBody(nil)
 		require.ErrorIs(t, err, format.ErrEmptyBody)
 	})
 
 	t.Run("not a map", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeRaftBody([]byte{0xc0}) // nil, not a map header
 		require.Error(t, err)
 	})
@@ -202,7 +215,8 @@ func TestDecodeDMLBody_AllKeys(t *testing.T) {
 	newT := []byte{0x91, 0x04}  // array(1)[4]
 	extraV := []byte{0x05}      // fixint
 
-	var b []byte
+	b := make([]byte, 0, 64)
+
 	b = append(b, kv(uint64(iproto.IPROTO_SPACE_ID), mpUint(512))...)
 	b = append(b, kv(uint64(iproto.IPROTO_TUPLE), tuple)...)
 	b = append(b, kv(uint64(iproto.IPROTO_KEY), key)...)
@@ -228,24 +242,28 @@ func TestDecodeDMLBody_Errors(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeDMLBody(nil)
 		require.ErrorIs(t, err, format.ErrEmptyBody)
 	})
 
 	t.Run("not a map", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeDMLBody([]byte{0x01})
 		require.Error(t, err)
 	})
 
 	t.Run("bad key", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeDMLBody([]byte{0x81, 0xcc})
 		require.Error(t, err)
 	})
 
 	t.Run("truncated value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := append(mpFixmap(1), kv(uint64(iproto.IPROTO_TUPLE), []byte{0xdc, 0x00})...) // array16 short
 		_, err := format.DecodeDMLBody(raw)
 		require.Error(t, err)
@@ -253,6 +271,7 @@ func TestDecodeDMLBody_Errors(t *testing.T) {
 
 	t.Run("bad space_id value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := buildMap(1, kv(uint64(iproto.IPROTO_SPACE_ID), []byte{0xa1, 'x'}))
 		_, err := format.DecodeDMLBody(raw)
 		require.Error(t, err)
@@ -266,7 +285,8 @@ func TestDecodeDMLBody_Errors(t *testing.T) {
 func TestDecodeSynchroBody_AllKeys(t *testing.T) {
 	t.Parallel()
 
-	var b []byte
+	b := make([]byte, 0, 32)
+
 	b = append(b, kv(uint64(iproto.IPROTO_REPLICA_ID), mpUint(3))...)
 	b = append(b, kv(uint64(iproto.IPROTO_LSN), mpUint(99))...)
 	b = append(b, kv(uint64(iproto.IPROTO_RAFT_TERM), mpUint(7))...)
@@ -286,24 +306,28 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeSynchroBody(nil)
 		require.ErrorIs(t, err, format.ErrEmptyBody)
 	})
 
 	t.Run("not a map", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeSynchroBody([]byte{0x01})
 		require.Error(t, err)
 	})
 
 	t.Run("bad key", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeSynchroBody([]byte{0x81, 0xcc})
 		require.Error(t, err)
 	})
 
 	t.Run("bad replica_id value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := buildMap(1, kv(uint64(iproto.IPROTO_REPLICA_ID), []byte{0xa1, 'x'}))
 		_, err := format.DecodeSynchroBody(raw)
 		require.Error(t, err)
@@ -311,6 +335,7 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 
 	t.Run("bad lsn value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := buildMap(1, kv(uint64(iproto.IPROTO_LSN), []byte{0xa1, 'x'}))
 		_, err := format.DecodeSynchroBody(raw)
 		require.Error(t, err)
@@ -318,6 +343,7 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 
 	t.Run("bad term value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := buildMap(1, kv(uint64(iproto.IPROTO_RAFT_TERM), []byte{0xa1, 'x'}))
 		_, err := format.DecodeSynchroBody(raw)
 		require.Error(t, err)
@@ -325,6 +351,7 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 
 	t.Run("truncated value skip", func(t *testing.T) {
 		t.Parallel()
+
 		raw := append(mpFixmap(1), kv(0x55, []byte{0xdc, 0x00})...) // array16 short header
 		_, err := format.DecodeSynchroBody(raw)
 		require.Error(t, err)
@@ -340,24 +367,28 @@ func TestDecodeVyLogBody_Errors(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeVyLogBody(nil)
 		require.ErrorIs(t, err, format.ErrEmptyBody)
 	})
 
 	t.Run("not a map", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeVyLogBody([]byte{0x01})
 		require.Error(t, err)
 	})
 
 	t.Run("bad key", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeVyLogBody([]byte{0x81, 0xcc})
 		require.Error(t, err)
 	})
 
 	t.Run("bad type value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), []byte{0xa1, 'x'}))
 		_, err := format.DecodeVyLogBody(raw)
 		require.Error(t, err)
@@ -365,6 +396,7 @@ func TestDecodeVyLogBody_Errors(t *testing.T) {
 
 	t.Run("truncated value skip", func(t *testing.T) {
 		t.Parallel()
+
 		raw := append(mpFixmap(1), kv(0x10, []byte{0xdc, 0x00})...)
 		_, err := format.DecodeVyLogBody(raw)
 		require.Error(t, err)
@@ -374,7 +406,8 @@ func TestDecodeVyLogBody_Errors(t *testing.T) {
 func TestDecodeVyLogBody_TypeAndKeys(t *testing.T) {
 	t.Parallel()
 
-	var b []byte
+	b := make([]byte, 0, 16)
+
 	b = append(b, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(9))...)
 	b = append(b, kv(0x10, []byte{0x91, 0x01})...)
 	raw := buildMap(2, b)
@@ -403,10 +436,11 @@ func TestFixheader_RoundTrip_LargeLen(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			h := &format.Fixheader{Magic: format.RowMarker, Len: tc.lenV, CRC32P: tc.p, CRC32C: tc.c}
+
 			var buf [format.FixheaderSize]byte
 			format.EncodeFixheader(&buf, h)
 			got, err := format.DecodeFixheader(buf)
@@ -424,7 +458,9 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 
 	t.Run("unknown magic", func(t *testing.T) {
 		t.Parallel()
+
 		var b [format.FixheaderSize]byte
+
 		b[0], b[1], b[2], b[3] = 'X', 'X', 'X', 'X'
 		_, err := format.DecodeFixheader(b)
 		require.ErrorIs(t, err, format.ErrUnknownMagic)
@@ -432,6 +468,7 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 
 	t.Run("bad len uint", func(t *testing.T) {
 		t.Parallel()
+
 		var b [format.FixheaderSize]byte
 		copy(b[:4], format.RowMarker[:])
 		b[4] = 0xc1 // never-used msgpack tag -> readMPUint unexpected tag
@@ -441,6 +478,7 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 
 	t.Run("bad crc32p uint", func(t *testing.T) {
 		t.Parallel()
+
 		var b [format.FixheaderSize]byte
 		copy(b[:4], format.RowMarker[:])
 		b[4] = 0x01 // len fixint
@@ -451,6 +489,7 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 
 	t.Run("bad padding shape", func(t *testing.T) {
 		t.Parallel()
+
 		var b [format.FixheaderSize]byte
 		copy(b[:4], format.RowMarker[:])
 		b[4], b[5], b[6] = 0x01, 0x00, 0x00 // three fixints
@@ -463,6 +502,7 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 
 	t.Run("padding truncated", func(t *testing.T) {
 		t.Parallel()
+
 		var b [format.FixheaderSize]byte
 		copy(b[:4], format.RowMarker[:])
 		b[4], b[5], b[6] = 0x01, 0x00, 0x00
@@ -476,8 +516,9 @@ func TestFixheader_Decode_Errors(t *testing.T) {
 func TestFixheader_DecodeTxBlock_TooShort(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := format.DecodeTxBlock([]byte{0x01, 0x02})
+	decoded, _, _, err := format.DecodeTxBlock([]byte{0x01, 0x02})
 	require.ErrorIs(t, err, format.ErrShortFixheader)
+	require.Nil(t, decoded)
 }
 
 // ---------------------------------------------------------------------------
@@ -487,66 +528,74 @@ func TestFixheader_DecodeTxBlock_TooShort(t *testing.T) {
 func TestDecodeMeta_Errors(t *testing.T) {
 	t.Parallel()
 
-	dec := func(s string) (*format.Meta, error) {
-		return decodeMetaString(s)
-	}
+	dec := decodeMetaString
 
 	t.Run("nil reader", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := format.DecodeMeta(nil, format.MetaOptions{})
 		require.ErrorIs(t, err, format.ErrNilMetaReader)
 	})
 
 	t.Run("truncated before terminator", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n0.13\nVersion: x\n")
 		require.ErrorIs(t, err, format.ErrMetaTruncated)
 	})
 
 	t.Run("unknown filetype", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("WUT\n0.13\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadFormat)
 	})
 
 	t.Run("bad version", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n7.77\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadVersion)
 	})
 
 	t.Run("line without colon", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n0.13\nnocolonhere\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadFormat)
 	})
 
 	t.Run("bad instance uuid", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n0.13\nInstance: not-a-uuid\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadFormat)
 	})
 
 	t.Run("bad vclock", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n0.13\nVClock: {bad}\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadFormat)
 	})
 
 	t.Run("bad prevvclock", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n0.13\nPrevVClock: {bad}\n\n")
 		require.ErrorIs(t, err, format.ErrMetaBadFormat)
 	})
 
 	t.Run("truncated after version line", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("XLOG\n")
 		require.ErrorIs(t, err, format.ErrMetaTruncated)
 	})
 
 	t.Run("empty input", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := dec("")
 		require.ErrorIs(t, err, format.ErrMetaTruncated)
 	})
@@ -576,7 +625,8 @@ func TestDecodeXRow_Float32Timestamp(t *testing.T) {
 	t.Parallel()
 
 	// Header map: {REQUEST_TYPE: INSERT, LSN: 1, TIMESTAMP: float32(1.5)} + body.
-	var hdr []byte
+	hdr := make([]byte, 0, 32)
+
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_INSERT)))...)
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_LSN), mpUint(1))...)
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_TIMESTAMP), mpFloat32(1.5))...)
@@ -597,10 +647,11 @@ func TestDecodeXRow_BadTimestamp(t *testing.T) {
 	}
 
 	for name, tsVal := range cases {
-		tsVal := tsVal
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			var hdr []byte
+
+			hdr := make([]byte, 0, 32)
+
 			hdr = append(hdr, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_INSERT)))...)
 			hdr = append(hdr, kv(uint64(iproto.IPROTO_TIMESTAMP), tsVal)...)
 			raw := append(buildMap(2, hdr), 0x80)
@@ -618,7 +669,8 @@ func TestDecodeXRow_BadTimestamp(t *testing.T) {
 func TestDecodeXRow_AllHeaderKeys(t *testing.T) {
 	t.Parallel()
 
-	var hdr []byte
+	hdr := make([]byte, 0, 64)
+
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_INSERT)))...)
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_REPLICA_ID), mpUint(2))...)
 	hdr = append(hdr, kv(uint64(iproto.IPROTO_GROUP_ID), mpUint(1))...)
@@ -646,24 +698,28 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
+
 		_, _, err := format.DecodeXRow(nil)
 		require.ErrorIs(t, err, format.ErrEmptyXRowInput)
 	})
 
 	t.Run("bad header map", func(t *testing.T) {
 		t.Parallel()
+
 		_, _, err := format.DecodeXRow([]byte{0x01})
 		require.Error(t, err)
 	})
 
 	t.Run("bad header key", func(t *testing.T) {
 		t.Parallel()
+
 		_, _, err := format.DecodeXRow([]byte{0x81, 0xcc})
 		require.Error(t, err)
 	})
 
 	t.Run("bad type value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -671,6 +727,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad replica_id value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_REPLICA_ID), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -678,6 +735,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad group_id value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_GROUP_ID), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -685,6 +743,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad lsn value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_LSN), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -692,6 +751,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad tsn value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_TSN), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -699,6 +759,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad flags value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_FLAGS), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -706,6 +767,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad stream_id value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(uint64(iproto.IPROTO_STREAM_ID), []byte{0xa1, 'x'}))
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -713,6 +775,7 @@ func TestDecodeXRow_Errors(t *testing.T) {
 
 	t.Run("bad unknown-key value", func(t *testing.T) {
 		t.Parallel()
+
 		raw := hdrPrefix(1, kv(0x7d, []byte{0xdc, 0x00})) // array16 short
 		_, _, err := format.DecodeXRow(raw)
 		require.Error(t, err)
@@ -756,6 +819,7 @@ func TestTxBlock_MultiRow_Compressed_RoundTrip(t *testing.T) {
 	for i := range big {
 		big[i] = byte(i * 7)
 	}
+
 	body := wrapMap(append([]byte{0xc6, 0x00, 0x00, 0x0b, 0xb8}, big...)) // bin32 len 3000
 
 	rows := []format.XRow{
@@ -765,7 +829,7 @@ func TestTxBlock_MultiRow_Compressed_RoundTrip(t *testing.T) {
 	}
 	blob, err := format.EncodeTxBlock(rows, format.TxOptions{})
 	require.NoError(t, err)
-	require.Equal(t, format.ZRowMarker, [4]byte{blob[0], blob[1], blob[2], blob[3]})
+	require.Equal(t, [4]byte{blob[0], blob[1], blob[2], blob[3]}, format.ZRowMarker)
 
 	slices, _, n, err := format.DecodeTxBlock(blob)
 	require.NoError(t, err)
@@ -795,10 +859,12 @@ func TestTxBlock_EOFMarker(t *testing.T) {
 
 	// A fixheader carrying the EOF marker magic decodes as ErrEOFMarkerBlock.
 	h := &format.Fixheader{Magic: format.EOFMarker}
+
 	var fh [format.FixheaderSize]byte
 	format.EncodeFixheader(&fh, h)
-	_, _, _, err := format.DecodeTxBlock(fh[:])
+	decoded, _, _, err := format.DecodeTxBlock(fh[:])
 	require.ErrorIs(t, err, format.ErrEOFMarkerBlock)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_PayloadLenExceeds(t *testing.T) {
@@ -808,8 +874,9 @@ func TestTxBlock_PayloadLenExceeds(t *testing.T) {
 	blob, err := format.EncodeTxBlock(rows, format.TxOptions{Compression: format.Compression{Disabled: true}})
 	require.NoError(t, err)
 	// Truncate the payload so h.Len exceeds the remaining bytes.
-	_, _, _, err = format.DecodeTxBlock(blob[:len(blob)-1])
+	decoded, _, _, err := format.DecodeTxBlock(blob[:len(blob)-1])
 	require.ErrorIs(t, err, format.ErrShortFixheader)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_BadCompressedPayload(t *testing.T) {
@@ -820,12 +887,14 @@ func TestTxBlock_BadCompressedPayload(t *testing.T) {
 	payload := []byte{0x01, 0x02, 0x03, 0x04}
 	crc := format.CRC32C(payload)
 	h := &format.Fixheader{Magic: format.ZRowMarker, Len: uint32(len(payload)), CRC32C: crc}
+
 	var fh [format.FixheaderSize]byte
 	format.EncodeFixheader(&fh, h)
 	blob := append(fh[:], payload...)
 
-	_, _, _, err := format.DecodeTxBlock(blob)
+	decoded, _, _, err := format.DecodeTxBlock(blob)
 	require.Error(t, err)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_SplitRows_MissingType(t *testing.T) {
@@ -836,8 +905,9 @@ func TestTxBlock_SplitRows_MissingType(t *testing.T) {
 	payload := buildMap(1, kv(uint64(iproto.IPROTO_LSN), mpUint(1)))
 	got, err := format.AppendFramedBlock(nil, payload, format.Compression{Disabled: true})
 	require.NoError(t, err)
-	_, _, _, err = format.DecodeTxBlock(got)
+	decoded, _, _, err := format.DecodeTxBlock(got)
 	require.ErrorIs(t, err, format.ErrMissingType)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_SplitRows_BadHeader(t *testing.T) {
@@ -847,8 +917,9 @@ func TestTxBlock_SplitRows_BadHeader(t *testing.T) {
 	payload := []byte{0x01}
 	got, err := format.AppendFramedBlock(nil, payload, format.Compression{Disabled: true})
 	require.NoError(t, err)
-	_, _, _, err = format.DecodeTxBlock(got)
+	decoded, _, _, err := format.DecodeTxBlock(got)
 	require.Error(t, err)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_SplitRows_BadHeaderValue(t *testing.T) {
@@ -860,8 +931,9 @@ func TestTxBlock_SplitRows_BadHeaderValue(t *testing.T) {
 		kv(0x7d, []byte{0xdc, 0x00})...)) // array16 short
 	got, err := format.AppendFramedBlock(nil, payload, format.Compression{Disabled: true})
 	require.NoError(t, err)
-	_, _, _, err = format.DecodeTxBlock(got)
+	decoded, _, _, err := format.DecodeTxBlock(got)
 	require.Error(t, err)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_SplitRows_BadType(t *testing.T) {
@@ -871,15 +943,17 @@ func TestTxBlock_SplitRows_BadType(t *testing.T) {
 	payload := buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), []byte{0xcc})) // uint8 missing byte
 	got, err := format.AppendFramedBlock(nil, payload, format.Compression{Disabled: true})
 	require.NoError(t, err)
-	_, _, _, err = format.DecodeTxBlock(got)
+	decoded, _, _, err := format.DecodeTxBlock(got)
 	require.Error(t, err)
+	require.Nil(t, decoded)
 }
 
 func TestTxBlock_SplitRows_NopThenInsert(t *testing.T) {
 	t.Parallel()
 
 	// NOP row (no body) immediately followed by an INSERT row with a body.
-	var p []byte
+	p := make([]byte, 0, 32)
+
 	p = append(p, buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_NOP))))...)
 	p = append(p, buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_INSERT))))...)
 	p = append(p, 0x80) // body for the INSERT
@@ -898,8 +972,9 @@ func TestTxBlock_SplitRows_BadBody(t *testing.T) {
 	p := append(buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_INSERT)))), 0xdc, 0x00)
 	got, err := format.AppendFramedBlock(nil, p, format.Compression{Disabled: true})
 	require.NoError(t, err)
-	_, _, _, err = format.DecodeTxBlock(got)
+	decoded, _, _, err := format.DecodeTxBlock(got)
 	require.Error(t, err)
+	require.Nil(t, decoded)
 }
 
 // ---------------------------------------------------------------------------
@@ -914,6 +989,7 @@ func TestCompressTx_RoundTrip(t *testing.T) {
 	for i := range payload {
 		payload[i] = byte(i % 251)
 	}
+
 	comp, err := format.CompressTx(payload)
 	require.NoError(t, err)
 	out, err := format.DecompressTx(comp, nil)
@@ -962,9 +1038,9 @@ func TestEncodeXRow_LargeUints_RoundTrip(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			r := &format.XRow{
 				Type:      iproto.IPROTO_INSERT,
 				ReplicaID: tc.replica,
@@ -1010,7 +1086,8 @@ func TestReadMPMapLen_Variants(t *testing.T) {
 	t.Run("map16 header", func(t *testing.T) {
 		t.Parallel()
 		// map16 with 1 entry: 0xde 0x00 0x01.
-		raw := []byte{0xde, 0x00, 0x01}
+		raw := make([]byte, 0, 8)
+		raw = append(raw, 0xde, 0x00, 0x01)
 		raw = append(raw, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_NOP)))...)
 		row, _, err := format.DecodeXRow(raw)
 		require.NoError(t, err)
@@ -1019,7 +1096,9 @@ func TestReadMPMapLen_Variants(t *testing.T) {
 
 	t.Run("map32 header", func(t *testing.T) {
 		t.Parallel()
-		raw := []byte{0xdf, 0x00, 0x00, 0x00, 0x01}
+
+		raw := make([]byte, 0, 8)
+		raw = append(raw, 0xdf, 0x00, 0x00, 0x00, 0x01)
 		raw = append(raw, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(uint64(iproto.IPROTO_NOP)))...)
 		row, _, err := format.DecodeXRow(raw)
 		require.NoError(t, err)
@@ -1028,12 +1107,14 @@ func TestReadMPMapLen_Variants(t *testing.T) {
 
 	t.Run("map16 short", func(t *testing.T) {
 		t.Parallel()
+
 		_, _, err := format.DecodeXRow([]byte{0xde, 0x00})
 		require.Error(t, err)
 	})
 
 	t.Run("map32 short", func(t *testing.T) {
 		t.Parallel()
+
 		_, _, err := format.DecodeXRow([]byte{0xdf, 0x00, 0x00})
 		require.Error(t, err)
 	})
@@ -1047,6 +1128,7 @@ func TestSkipMP_AllTypes(t *testing.T) {
 
 	str := func(tag byte, lenBytes []byte, payloadLen int) []byte {
 		v := append([]byte{tag}, lenBytes...)
+
 		return append(v, make([]byte, payloadLen)...)
 	}
 
@@ -1090,7 +1172,6 @@ func TestSkipMP_AllTypes(t *testing.T) {
 	}
 
 	for name, val := range values {
-		val := val
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			// {unknownKey: val, REQUEST_TYPE: NOP} as a 2-entry header.
@@ -1135,7 +1216,6 @@ func TestSkipMP_TruncatedTypes(t *testing.T) {
 	}
 
 	for name, val := range bad {
-		val := val
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			// Place the malformed value as an unknown header key's value.

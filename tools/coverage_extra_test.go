@@ -344,7 +344,7 @@ func TestRewriteMeta_SyncDirFails(t *testing.T) {
 	dst := filepath.Join(t.TempDir(), "out.xlog")
 
 	restore := tools.SetSyncDirForTest(func(string) error {
-		return assertErr{}
+		return assertError{}
 	})
 	defer restore()
 
@@ -356,10 +356,10 @@ func TestRewriteMeta_SyncDirFails(t *testing.T) {
 	assert.NoError(t, statErr, "dst should exist after rename even if dir-sync failed")
 }
 
-// assertErr is a trivial error used by the syncDir seam.
-type assertErr struct{}
+// assertError is a trivial error used by the syncDir seam.
+type assertError struct{}
 
-func (assertErr) Error() string { return "injected sync error" }
+func (assertError) Error() string { return "injected sync error" }
 
 // A syncDir failure inside writeUUIDBackup (the first dir-sync of a replace)
 // aborts the operation before the in-place write. Exercises the
@@ -369,7 +369,7 @@ func (assertErr) Error() string { return "injected sync error" }
 func TestReplaceInPlace_BackupSyncDirFails(t *testing.T) {
 	path := copyFixture(t)
 
-	restore := tools.SetSyncDirForTest(func(string) error { return assertErr{} })
+	restore := tools.SetSyncDirForTest(func(string) error { return assertError{} })
 	defer restore()
 
 	err := tools.ReplaceInstanceUUIDInPlace(path,
@@ -393,7 +393,7 @@ func TestReplaceInPlace_RemoveBackupSyncDirFails(t *testing.T) {
 		// writeUUIDBackup issues the first dir-sync (let it pass); the second
 		// is removeUUIDBackup after the successful in-place write (fail it).
 		if calls >= 2 {
-			return assertErr{}
+			return assertError{}
 		}
 
 		return nil
@@ -421,11 +421,12 @@ func TestRecover_RemoveBackupSyncDirFails(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.ReadAt(orig, start)
 	require.NoError(t, err)
+
 	_ = f.Close()
 
 	writeBackupFile(t, path, start, orig)
 
-	restore := tools.SetSyncDirForTest(func(string) error { return assertErr{} })
+	restore := tools.SetSyncDirForTest(func(string) error { return assertError{} })
 	defer restore()
 
 	recovered, err := tools.RecoverInstanceUUIDInPlace(path)
@@ -462,6 +463,7 @@ func TestRecover_RemoveBackupUnlinkFails(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.ReadAt(orig, start)
 	require.NoError(t, err)
+
 	_ = f.Close()
 
 	writeBackupFile(t, path, start, orig)

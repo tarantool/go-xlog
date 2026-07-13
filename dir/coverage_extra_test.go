@@ -61,7 +61,7 @@ func TestOpenDir_CorruptFile(t *testing.T) {
 //	vc2 = {1:  5, 2: 11} → sig = 16
 //
 // Compare({1:10,2:5}, {1:5,2:11}): id 1 → 10 > 5 (sawGT); id 2 → 5 < 11
-// (sawLT) → both flags set → incomparable (ok=false). ✓
+// (sawLT) → both flags set → incomparable (ok=false). ✓.
 func TestOpenDir_IncomparableVClock(t *testing.T) {
 	t.Parallel()
 
