@@ -44,7 +44,6 @@ func TestPath_MultipleFixtures(t *testing.T) {
 	}
 
 	for _, name := range fixtures {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -52,6 +51,7 @@ func TestPath_MultipleFixtures(t *testing.T) {
 			if !filepath.IsAbs(got) {
 				t.Errorf("Path(%q) = %q; want absolute path", name, got)
 			}
+
 			want := filepath.Join("testdata", name)
 			if !strings.HasSuffix(got, want) {
 				t.Errorf("Path(%q) = %q; want suffix %q", name, got, want)
@@ -108,8 +108,9 @@ func runInIsolatedTests(name string, fn func(t *testing.T)) bool {
 func TestPath_NotFound(t *testing.T) {
 	t.Parallel()
 
-	passed := runInIsolatedTests("path_not_found", func(inner *testing.T) {
-		testutil.Path(inner, "definitely-does-not-exist-fixture-xyz.snap")
+	passed := runInIsolatedTests("path_not_found", func(t *testing.T) {
+		t.Helper()
+		testutil.Path(t, "definitely-does-not-exist-fixture-xyz.snap")
 	})
 
 	// We expect the inner test to FAIL (passed == false) because Fatalf was called.
@@ -122,8 +123,9 @@ func TestPath_NotFound(t *testing.T) {
 func TestLoad_NotFound(t *testing.T) {
 	t.Parallel()
 
-	passed := runInIsolatedTests("load_not_found", func(inner *testing.T) {
-		testutil.Load(inner, "definitely-does-not-exist-fixture-xyz.snap")
+	passed := runInIsolatedTests("load_not_found", func(t *testing.T) {
+		t.Helper()
+		testutil.Load(t, "definitely-does-not-exist-fixture-xyz.snap")
 	})
 
 	if passed {
@@ -134,38 +136,38 @@ func TestLoad_NotFound(t *testing.T) {
 // TestLoad_ReadError exercises the branch in Load where Path succeeds but
 // os.ReadFile fails because the file has been made unreadable.
 //
-// Not parallel: temporarily changes the process working directory.
+// Not parallel: t.Chdir temporarily changes the process working directory,
+// which is incompatible with t.Parallel().
+//
+//nolint:paralleltest // uses t.Chdir, cannot run in parallel
 func TestLoad_ReadError(t *testing.T) {
 	tmp := t.TempDir()
+
 	tdDir := filepath.Join(tmp, "testdata")
 	if err := os.MkdirAll(tdDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
 	fixtureName := "unreadable_for_coverage_test.bin"
+
 	fixturePath := filepath.Join(tdDir, fixtureName)
 	if err := os.WriteFile(fixturePath, []byte("data"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(tmp); err != nil {
-		t.Fatalf("Chdir: %v", err)
-	}
+	t.Chdir(tmp)
+
 	t.Cleanup(func() {
 		_ = os.Chmod(fixturePath, 0o644)
-		_ = os.Chdir(origDir)
 	})
 
 	if err := os.Chmod(fixturePath, 0o000); err != nil {
 		t.Fatalf("Chmod: %v", err)
 	}
 
-	passed := runInIsolatedTests("load_read_error", func(inner *testing.T) {
-		testutil.Load(inner, fixtureName)
+	passed := runInIsolatedTests("load_read_error", func(t *testing.T) {
+		t.Helper()
+		testutil.Load(t, fixtureName)
 	})
 
 	if passed {

@@ -93,6 +93,7 @@ func TestSync_FileWriter(t *testing.T) {
 			defer func() { _ = r.Close() }()
 
 			n := 0
+
 			for _, err := range r.Rows() {
 				require.NoError(t, err)
 
@@ -159,6 +160,7 @@ func TestCreate_FullLifecycle(t *testing.T) {
 	defer func() { _ = r.Close() }()
 
 	txs := 0
+
 	for _, err := range r.Txs() {
 		require.NoError(t, err)
 
@@ -198,6 +200,7 @@ func TestWriteRow_AutoCommitOnThreshold(t *testing.T) {
 	defer func() { _ = r.Close() }()
 
 	n := 0
+
 	for _, err := range r.Rows() {
 		require.NoError(t, err)
 
@@ -412,6 +415,7 @@ func TestClose_EmptyFileWriter(t *testing.T) {
 	defer func() { _ = r.Close() }()
 
 	n := 0
+
 	for _, err := range r.Rows() {
 		require.NoError(t, err)
 
@@ -452,6 +456,7 @@ func TestBatchWriter_FileLifecycle(t *testing.T) {
 	defer func() { _ = r.Close() }()
 
 	n := 0
+
 	for _, err := range r.Rows() {
 		require.NoError(t, err)
 
@@ -716,9 +721,10 @@ func incompressibleBody(n int) []byte {
 // appendBinBody frames raw as msgpack: [ bin(raw) ] (array of one bin).
 func appendBinBody(raw []byte) []byte {
 	b := make([]byte, 0, len(raw)+8)
-	b = append(b, 0x91)   // fixarray, 1 element
-	b = append(b, 0xc6)   // bin32
-	n := uint32(len(raw)) //nolint:gosec
+	b = append(b, 0x91) // fixarray, 1 element
+	b = append(b, 0xc6) // bin32
+	n := uint32(len(raw))
 	b = append(b, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+
 	return append(b, raw...)
 }
