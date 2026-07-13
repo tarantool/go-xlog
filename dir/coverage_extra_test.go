@@ -119,8 +119,8 @@ func TestOpenDirFS_SkipsSubdirectory(t *testing.T) {
 	name := strconv.FormatInt(sig, 10) + ".xlog"
 
 	fsys := fstest.MapFS{
-		name:      &fstest.MapFile{Data: data},
-		"subdir":  &fstest.MapFile{Mode: fs.ModeDir | 0o755},
+		name:     &fstest.MapFile{Data: data},
+		"subdir": &fstest.MapFile{Mode: fs.ModeDir | 0o755},
 	}
 
 	d, err := dir.OpenDirFS(fsys, ".", format.FiletypeXLOG)

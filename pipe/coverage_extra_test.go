@@ -147,4 +147,3 @@ func buildInMemSource(t *testing.T) []byte {
 
 	return buf.Bytes()
 }
-

@@ -716,9 +716,9 @@ func incompressibleBody(n int) []byte {
 // appendBinBody frames raw as msgpack: [ bin(raw) ] (array of one bin).
 func appendBinBody(raw []byte) []byte {
 	b := make([]byte, 0, len(raw)+8)
-	b = append(b, 0x91)             // fixarray, 1 element
-	b = append(b, 0xc6)             // bin32
-	n := uint32(len(raw))           //nolint:gosec
+	b = append(b, 0x91)   // fixarray, 1 element
+	b = append(b, 0xc6)   // bin32
+	n := uint32(len(raw)) //nolint:gosec
 	b = append(b, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 	return append(b, raw...)
 }
