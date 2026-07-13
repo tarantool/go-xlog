@@ -168,13 +168,28 @@ func ReplaceInstanceUUIDInPlace(path string, newID uuid.UUID) error {
 func RecoverInstanceUUIDInPlace(path string) (bool, error) {
 	backupPath := path + uuidBackupSuffix
 
-	data, err := os.ReadFile(backupPath)
+	bf, err := os.Open(backupPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 
 	if err != nil {
-		return false, fmt.Errorf("tools.RecoverInstanceUUIDInPlace: read backup %q: %w", backupPath, err)
+		return false, fmt.Errorf("tools.RecoverInstanceUUIDInPlace: open backup %q: %w", backupPath, err)
+	}
+
+	// Read at most one byte past the largest valid sidecar. An oversized or
+	// unbounded sidecar (e.g. a symlink to /dev/full, whose reads never end) is
+	// then rejected by the size check below instead of being slurped whole into
+	// memory, which would OOM the process.
+	data, readErr := io.ReadAll(io.LimitReader(bf, uuidBackupHeaderLen+maxUUIDBackupValueLen+1))
+	closeErr := bf.Close()
+
+	if readErr != nil {
+		return false, fmt.Errorf("tools.RecoverInstanceUUIDInPlace: read backup %q: %w", backupPath, readErr)
+	}
+
+	if closeErr != nil {
+		return false, fmt.Errorf("tools.RecoverInstanceUUIDInPlace: close backup %q: %w", backupPath, closeErr)
 	}
 
 	if len(data) <= uuidBackupHeaderLen || len(data)-uuidBackupHeaderLen > maxUUIDBackupValueLen {
