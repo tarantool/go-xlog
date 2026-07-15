@@ -27,6 +27,7 @@ var (
 	ErrShortPayload    = errors.New("payload")
 	ErrShortFixedWidth = errors.New("short fixed-width value")
 	ErrShortFixstr     = errors.New("short fixstr")
+	ErrIntegerOverflow = errors.New("integer overflows int64")
 )
 
 // msgpack header widths: a one-byte type tag followed by a big-endian length
@@ -192,6 +193,89 @@ func readMPUint(b []byte) (uint64, int, error) {
 	}
 }
 
+// readMPInt reads any msgpack integer scalar and returns (value, bytes-read).
+// Unsigned encodings are accepted when their value fits in int64.
+func readMPInt(b []byte) (int64, int, error) {
+	if len(b) == 0 {
+		return 0, 0, fmt.Errorf("format: mp int: %w", ErrEmptyInput)
+	}
+
+	c := b[0]
+	switch {
+	case c <= mpcPosFixedNumHigh:
+		return int64(c), mpTagSize, nil
+	case c >= mpcNegFixedNumLow:
+		return int64(int8(c)), mpTagSize, nil //nolint:gosec // G115: decode two's-complement msgpack bits.
+	}
+
+	switch c {
+	case mpcUint8, mpcUint16, mpcUint32, mpcUint64:
+		n, width, err := readMPUint(b)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		if n > math.MaxInt64 {
+			return 0, 0, fmt.Errorf("format: mp int: %w", ErrIntegerOverflow)
+		}
+
+		return int64(n), width, nil
+	case mpcInt8:
+		if len(b) < mpHead8 {
+			return 0, 0, fmt.Errorf("format: mp int8: %w", ErrShortInput)
+		}
+
+		return int64(int8(b[1])), mpHead8, nil //nolint:gosec // G115: decode two's-complement msgpack bits.
+	case mpcInt16:
+		if len(b) < mpHead16 {
+			return 0, 0, fmt.Errorf("format: mp int16: %w", ErrShortInput)
+		}
+
+		return int64(int16(binary.BigEndian.Uint16(b[1:mpHead16]))), mpHead16, nil //nolint:gosec // G115: decode two's-complement msgpack bits.
+	case mpcInt32:
+		if len(b) < mpHead32 {
+			return 0, 0, fmt.Errorf("format: mp int32: %w", ErrShortInput)
+		}
+
+		return int64(int32(binary.BigEndian.Uint32(b[1:mpHead32]))), mpHead32, nil //nolint:gosec // G115: decode two's-complement msgpack bits.
+	case mpcInt64:
+		if len(b) < mpHead64 {
+			return 0, 0, fmt.Errorf("format: mp int64: %w", ErrShortInput)
+		}
+
+		return int64(binary.BigEndian.Uint64(b[1:mpHead64])), mpHead64, nil //nolint:gosec // G115: decode two's-complement msgpack bits.
+	default:
+		return 0, 0, fmt.Errorf("format: mp int: %w 0x%02x", ErrUnexpectedTag, c)
+	}
+}
+
+// readMPArrayLen reads a msgpack array header and returns (elements, header-len).
+func readMPArrayLen(b []byte) (int, int, error) {
+	if len(b) == 0 {
+		return 0, 0, fmt.Errorf("format: mp array: %w", ErrEmptyInput)
+	}
+
+	c := b[0]
+	switch {
+	case c >= mpcFixedArrayLow && c <= mpcFixedArrayHigh:
+		return int(c & mpcFixedArrayMask), mpTagSize, nil
+	case c == mpcArray16:
+		if len(b) < mpHead16 {
+			return 0, 0, fmt.Errorf("format: mp array16: %w", ErrShortInput)
+		}
+
+		return int(binary.BigEndian.Uint16(b[1:mpHead16])), mpHead16, nil
+	case c == mpcArray32:
+		if len(b) < mpHead32 {
+			return 0, 0, fmt.Errorf("format: mp array32: %w", ErrShortInput)
+		}
+
+		return int(binary.BigEndian.Uint32(b[1:mpHead32])), mpHead32, nil
+	default:
+		return 0, 0, fmt.Errorf("format: mp array: %w 0x%02x", ErrUnexpectedTag, c)
+	}
+}
+
 // readMPMapLen reads a msgpack map header and returns (entries, header-len).
 func readMPMapLen(b []byte) (int, int, error) {
 	if len(b) == 0 {
@@ -217,6 +301,55 @@ func readMPMapLen(b []byte) (int, int, error) {
 	default:
 		return 0, 0, fmt.Errorf("format: mp map: %w 0x%02x", ErrUnexpectedTag, c)
 	}
+}
+
+// readMPStr reads a msgpack string and returns its payload as an alias of b,
+// plus the total number of bytes consumed.
+func readMPStr(b []byte) ([]byte, int, error) {
+	if len(b) == 0 {
+		return nil, 0, fmt.Errorf("format: mp str: %w", ErrEmptyInput)
+	}
+
+	c := b[0]
+
+	var headerLen, payloadLen int
+
+	switch {
+	case c >= mpcFixedStrLow && c <= mpcFixedStrHigh:
+		headerLen = mpTagSize
+		payloadLen = int(c & mpcFixedStrMask)
+	case c == mpcStr8:
+		if len(b) < mpHead8 {
+			return nil, 0, fmt.Errorf("format: mp str8: %w", ErrShortInput)
+		}
+
+		headerLen = mpHead8
+		payloadLen = int(b[1])
+	case c == mpcStr16:
+		if len(b) < mpHead16 {
+			return nil, 0, fmt.Errorf("format: mp str16: %w", ErrShortInput)
+		}
+
+		headerLen = mpHead16
+		payloadLen = int(binary.BigEndian.Uint16(b[1:mpHead16]))
+	case c == mpcStr32:
+		if len(b) < mpHead32 {
+			return nil, 0, fmt.Errorf("format: mp str32: %w", ErrShortInput)
+		}
+
+		headerLen = mpHead32
+		payloadLen = int(binary.BigEndian.Uint32(b[1:mpHead32]))
+	default:
+		return nil, 0, fmt.Errorf("format: mp str: %w 0x%02x", ErrUnexpectedTag, c)
+	}
+
+	if payloadLen > len(b)-headerLen {
+		return nil, 0, fmt.Errorf("format: mp str: %w", ErrShortPayload)
+	}
+
+	consumed := headerLen + payloadLen
+
+	return b[headerLen:consumed], consumed, nil
 }
 
 // readMPDouble reads a msgpack float32 / float64 and returns (value, n-read).
