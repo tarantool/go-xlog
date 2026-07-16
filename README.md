@@ -1,9 +1,9 @@
-# go-xlog
+[![Go Reference][godoc-badge]][godoc-url]
+[![Code Coverage][coverage-badge]][coverage-url]
+[![Telegram EN][telegram-badge]][telegram-en-url]
+[![Telegram RU][telegram-badge]][telegram-ru-url]
 
-[![CI](https://github.com/tarantool/go-xlog/actions/workflows/ci.yml/badge.svg)](https://github.com/tarantool/go-xlog/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/tarantool/go-xlog.svg)](https://pkg.go.dev/github.com/tarantool/go-xlog)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tarantool/go-xlog)](https://goreportcard.com/report/github.com/tarantool/go-xlog)
-[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](LICENSE)
+# go-xlog
 
 A pure-Go library for reading, writing, and rewriting
 [Tarantool](https://www.tarantool.io/) journal files — write-ahead logs
@@ -524,3 +524,11 @@ directory and rotation helpers are newer.
 ## License
 
 [BSD 2-Clause](LICENSE).
+
+[godoc-badge]: https://pkg.go.dev/badge/github.com/tarantool/go-xlog.svg
+[godoc-url]: https://pkg.go.dev/github.com/tarantool/go-xlog
+[coverage-badge]: https://coveralls.io/repos/github/tarantool/go-xlog/badge.svg?branch=master
+[coverage-url]: https://coveralls.io/github/tarantool/go-xlog?branch=master
+[telegram-badge]: https://img.shields.io/badge/Telegram-join%20chat-blue.svg
+[telegram-en-url]: http://telegram.me/tarantool
+[telegram-ru-url]: http://telegram.me/tarantoolru
