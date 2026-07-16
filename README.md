@@ -521,6 +521,12 @@ Pre-1.0. The API may still shift before a tagged release. The on-disk format
 handling is the most thoroughly exercised part of the library; the higher-level
 directory and rotation helpers are newer.
 
+## Contributing
+
+Contributions are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch
+naming, how to run the tests and linters, the code-review checklist, and the
+commit-message and pull-request conventions.
+
 ## License
 
 [BSD 2-Clause](LICENSE).
