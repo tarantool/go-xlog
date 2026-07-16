@@ -1,0 +1,6 @@
+[codespell]
+
+skip = ./.git,./testdata,./format/testdata
+# unparseable: valid variant spelling; crashers: go-fuzz term; pathc: pathC var
+ignore-words-list = unparseable,crashers,pathc
+check-filenames = true
