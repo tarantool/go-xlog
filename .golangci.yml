@@ -17,7 +17,6 @@ linters:
   default: all
   disable:
     # --- need project-specific policy we intentionally do not define ---
-    - depguard # Needs an explicit import allow/deny policy (none defined).
     - exhaustruct # Flags every partial struct literal project-wide; noise.
 
     # --- superseded ---
@@ -38,6 +37,22 @@ linters:
     - exhaustive # Switches over iproto.Type/iproto.Key handle the journal's subset + default; enumerating all ~60 IPROTO request types is noise.
 
   settings:
+    depguard:
+      # Explicit import allow-list for non-test production code. Only the Go
+      # standard library and the handful of vetted public deps this library
+      # actually imports are permitted; anything else (an internal/ package
+      # escaping, a stray corporate dependency) fails at lint time rather than
+      # surfacing after publication. Keep this list in sync with go.mod's
+      # direct deps that are reachable from non-test code.
+      rules:
+        main:
+          files: ["$all", "!$test"]
+          allow:
+            - $gostd
+            - github.com/tarantool/go-xlog # this module's own packages (internal/ visibility is enforced by the compiler)
+            - github.com/google/uuid
+            - github.com/klauspost/compress/zstd
+            - github.com/tarantool/go-iproto
     gosec:
       excludes:
         # A file-format library opens caller-supplied paths by design.
