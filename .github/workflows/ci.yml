@@ -61,6 +61,12 @@ jobs:
         with:
           version: v2.11.4
 
+      - name: codespell
+        if: runner.os == 'Linux'
+        run: |
+          pip3 install codespell==2.4.2
+          codespell
+
       # --- examples module (separate go.mod) ---
 
       - name: examples — go vet
@@ -122,3 +128,31 @@ jobs:
       - name: Build examples
         working-directory: examples
         run: go build ./...
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      # Same rationale as the test job: integration tests skip without it.
+      - name: Install Tarantool
+        continue-on-error: true
+        run: |
+          curl -fsSL https://www.tarantool.io/release/3/installer.sh | sudo bash
+          sudo apt-get install -y tarantool
+
+      - name: Test with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload to Coveralls
+        env:
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go install github.com/mattn/goveralls@latest
+          goveralls -coverprofile=coverage.out -service=github
