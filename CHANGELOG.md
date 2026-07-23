@@ -10,6 +10,22 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [v0.1.0] - 2026-07-23
+
+First release of `go-xlog`, a pure-Go byte-level codec and toolkit for the
+Tarantool journal format (XLOG/SNAP/VYLOG/RUN/INDEX). It provides
+format-faithful encode/decode (Tarantool 3.x `0.13`, legacy `0.12` read
+support), single-file and directory-aware readers/writers with atomic durable
+finalization, composable row filters, streaming pipes, and live tailing
+(`follow`) with restart checkpointing. Iteration is built on `iter.Seq2`
+range-over-func cursors with zero-allocation and zero-copy fast paths.
+
+### Added
+
 - format: Pure byte-level codec for the Tarantool journal format — `Meta`,
   `XRow`, `VClock`, and encode/decode helpers with no I/O. Format-faithful to
   Tarantool 3.x (version `0.13`), reads legacy `0.12` with `AcceptV012()`,
@@ -45,8 +61,6 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   tailing of the active `.inprogress` file, and a `Follower` type exposing
   `Offset()` for restart checkpointing. Backed by `reader.OpenAt`,
   `reader.Offset`, and `reader.SawEOFMarker`.
-
-### Changed
 
 ### Fixed
 
