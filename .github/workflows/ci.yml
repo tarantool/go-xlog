@@ -15,12 +15,6 @@ concurrency:
 jobs:
   static:
     name: static (${{ matrix.os }})
-    # Skip same-repo PRs: the push event already covers internal branches, so
-    # running here too would double CI. Fork PRs (head repo != this repo) and
-    # pushes still run.
-    if: github.event_name == 'push' ||
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -97,9 +91,6 @@ jobs:
 
   test:
     name: test (${{ matrix.os }}, go ${{ matrix.go }})
-    if: github.event_name == 'push' ||
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -140,9 +131,6 @@ jobs:
 
   coverage:
     name: coverage
-    if: github.event_name == 'push' ||
-        (github.event_name == 'pull_request' &&
-         github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
