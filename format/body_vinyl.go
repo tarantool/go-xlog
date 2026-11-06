@@ -122,11 +122,31 @@ type VyStmtBody struct {
 	Extras map[uint64][]byte
 }
 
-// DecodeVyStmtBody parses the body of a statement of a .run file.
+// DecodeVyStmtBody parses the body of a statement of a .run file. It is
+// DecodeVyStmtBodyInto into a new VyStmtBody.
 func DecodeVyStmtBody(b []byte) (*VyStmtBody, error) {
 	body := &VyStmtBody{}
 
-	err := walkBody("DecodeVyStmtBody", b, func(key uint64, val []byte) error {
+	if err := DecodeVyStmtBodyInto(b, body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// DecodeVyStmtBodyInto parses the body of a statement of a .run file into
+// dst, the zero-allocation core of DecodeVyStmtBody. It first resets dst to
+// the zero VyStmtBody, so a dst reused across statements carries no field of
+// a prior one, then sets the fields of the keys b holds. The raw fields of
+// dst (Tuple, Key, Ops, the values of Extras) alias b; clone one before
+// retaining it past b's lifetime. A map of a prior statement is never
+// reused: a body with a key that has no field allocates a new Extras map. On
+// error dst holds what was decoded before it.
+func DecodeVyStmtBodyInto(b []byte, dst *VyStmtBody) error {
+	*dst = VyStmtBody{}
+	body := dst
+
+	return walkBody("DecodeVyStmtBody", b, func(key uint64, val []byte) error {
 		switch iproto.Key(key) { //nolint:exhaustive,gosec // G115: msgpack body key is a small protocol number
 		case iproto.IPROTO_SPACE_ID:
 			v, _, err := readMPUint(val)
@@ -158,11 +178,6 @@ func DecodeVyStmtBody(b []byte) (*VyStmtBody, error) {
 
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return body, nil
 }
 
 // decodeVyStmtMeta reads the flags of the IPROTO_TUPLE_META map of a
@@ -222,19 +237,42 @@ type VyRunInfo struct {
 
 // DecodeVyRunInfoBody parses the body of a VY_INDEX_RUN_INFO row. Like
 // Tarantool's vy_run_info_decode it requires the keys, the LSNs and the page
-// count.
+// count. It is DecodeVyRunInfoBodyInto into a new VyRunInfo.
 func DecodeVyRunInfoBody(b []byte) (*VyRunInfo, error) {
-	const name = "DecodeVyRunInfoBody"
-
 	info := &VyRunInfo{}
-	required := map[uint64]string{
-		vyRunInfoMinKey: "min_key", vyRunInfoMaxKey: "max_key",
-		vyRunInfoMinLSN: "min_lsn", vyRunInfoMaxLSN: "max_lsn",
-		vyRunInfoPageCount: "page_count",
+
+	if err := DecodeVyRunInfoBodyInto(b, info); err != nil {
+		return nil, err
 	}
 
+	return info, nil
+}
+
+// vyRunInfoRequired are the keys vy_run_info_decode requires, in key order.
+var vyRunInfoRequired = []vyRequiredKey{
+	{vyRunInfoMinKey, "min_key"}, {vyRunInfoMaxKey, "max_key"},
+	{vyRunInfoMinLSN, "min_lsn"}, {vyRunInfoMaxLSN, "max_lsn"},
+	{vyRunInfoPageCount, "page_count"},
+}
+
+// DecodeVyRunInfoBodyInto parses the body of a VY_INDEX_RUN_INFO row into
+// dst, the zero-allocation core of DecodeVyRunInfoBody. It first resets dst to
+// the zero VyRunInfo, so a reused dst carries no field of a prior row, then
+// sets the fields of the keys b holds. The raw fields of dst (MinKey, MaxKey,
+// Bloom, the values of Extras) alias b; clone one before retaining it past
+// b's lifetime. A map of a prior row is never reused: a body with a key that
+// has no field allocates a new Extras map. On error dst holds what was
+// decoded before it.
+func DecodeVyRunInfoBodyInto(b []byte, dst *VyRunInfo) error {
+	const name = "DecodeVyRunInfoBody"
+
+	*dst = VyRunInfo{}
+	info := dst
+
+	var seen vyKeySet
+
 	err := walkBody(name, b, func(key uint64, val []byte) error {
-		delete(required, key)
+		seen.add(key)
 
 		switch key {
 		case vyRunInfoMinKey:
@@ -276,14 +314,10 @@ func DecodeVyRunInfoBody(b []byte) (*VyRunInfo, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := missingKey(name, required); err != nil {
-		return nil, err
-	}
-
-	return info, nil
+	return missingKey(name, vyRunInfoRequired, seen)
 }
 
 // bloomVersion is the version of the bloom filter under a run info key
@@ -349,19 +383,43 @@ type VyPageInfo struct {
 }
 
 // DecodeVyPageInfoBody parses the body of a VY_INDEX_PAGE_INFO row. Like
-// Tarantool's vy_page_info_decode it requires every key.
+// Tarantool's vy_page_info_decode it requires every key. It is
+// DecodeVyPageInfoBodyInto into a new VyPageInfo.
 func DecodeVyPageInfoBody(b []byte) (*VyPageInfo, error) {
-	const name = "DecodeVyPageInfoBody"
-
 	page := &VyPageInfo{}
-	required := map[uint64]string{
-		vyPageInfoOffset: "offset", vyPageInfoSize: "size",
-		vyPageInfoUnpackedSize: "unpacked_size", vyPageInfoRowCount: "row_count",
-		vyPageInfoMinKey: "min_key", vyPageInfoRowIndexOffset: "row_index_offset",
+
+	if err := DecodeVyPageInfoBodyInto(b, page); err != nil {
+		return nil, err
 	}
 
+	return page, nil
+}
+
+// vyPageInfoRequired are the keys vy_page_info_decode requires, in key order.
+var vyPageInfoRequired = []vyRequiredKey{
+	{vyPageInfoOffset, "offset"}, {vyPageInfoSize, "size"},
+	{vyPageInfoUnpackedSize, "unpacked_size"}, {vyPageInfoRowCount, "row_count"},
+	{vyPageInfoMinKey, "min_key"}, {vyPageInfoRowIndexOffset, "row_index_offset"},
+}
+
+// DecodeVyPageInfoBodyInto parses the body of a VY_INDEX_PAGE_INFO row into
+// dst, the zero-allocation core of DecodeVyPageInfoBody. It first resets dst
+// to the zero VyPageInfo, so a reused dst carries no field of a prior row,
+// then sets the fields of the keys b holds. The raw fields of dst (MinKey,
+// the values of Extras) alias b; clone one before retaining it past b's
+// lifetime. A map of a prior row is never reused: a body with a key that has
+// no field allocates a new Extras map. On error dst holds what was decoded
+// before it.
+func DecodeVyPageInfoBodyInto(b []byte, dst *VyPageInfo) error {
+	const name = "DecodeVyPageInfoBody"
+
+	*dst = VyPageInfo{}
+	page := dst
+
+	var seen vyKeySet
+
 	err := walkBody(name, b, func(key uint64, val []byte) error {
-		delete(required, key)
+		seen.add(key)
 
 		switch key {
 		case vyPageInfoMinKey:
@@ -396,14 +454,10 @@ func DecodeVyPageInfoBody(b []byte) (*VyPageInfo, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := missingKey(name, required); err != nil {
-		return nil, err
-	}
-
-	return page, nil
+	return missingKey(name, vyPageInfoRequired, seen)
 }
 
 // DecodeVyRowIndexBody parses the body of a VY_RUN_ROW_INDEX row: the offset of
@@ -490,19 +544,31 @@ func walkMap(b []byte, fn func(key uint64, val []byte) error) error {
 	return nil
 }
 
-// missingKey reports the smallest key of required, the mandatory keys a body
-// lacks, as Tarantool does.
-func missingKey(name string, required map[uint64]string) error {
-	if len(required) == 0 {
-		return nil
-	}
+// vyRequiredKey is a key a vinyl body requires and its name in an error.
+type vyRequiredKey struct {
+	key  uint64
+	name string
+}
 
-	least := uint64(0)
-	for key := range required {
-		if least == 0 || key < least {
-			least = key
+// vyKeySet is a set of the keys below 64 a vinyl body holds, one bit per key:
+// it tracks the required keys with no allocation.
+type vyKeySet uint64
+
+// add adds key to the set; a key of 64 or more is not one a body requires.
+func (s *vyKeySet) add(key uint64) {
+	if key < 64 { //nolint:mnd // The bits of a vyKeySet.
+		*s |= 1 << key
+	}
+}
+
+// missingKey reports the smallest key of required, the mandatory keys of a
+// body in key order, that seen lacks, as Tarantool does.
+func missingKey(name string, required []vyRequiredKey, seen vyKeySet) error {
+	for _, r := range required {
+		if seen&(1<<r.key) == 0 {
+			return fmt.Errorf("format: %s: %w %s", name, ErrVyMissingKey, r.name)
 		}
 	}
 
-	return fmt.Errorf("format: %s: %w %s", name, ErrVyMissingKey, required[least])
+	return nil
 }

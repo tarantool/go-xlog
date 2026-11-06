@@ -55,23 +55,44 @@ type DMLBody struct {
 var ErrEmptyBody = errors.New("empty body")
 
 // DecodeDMLBody parses a DML body map at b[0:]. It returns an error if b
-// is not a msgpack map header.
+// is not a msgpack map header. It is DecodeDMLBodyInto into a new DMLBody.
 func DecodeDMLBody(b []byte) (*DMLBody, error) {
+	body := &DMLBody{}
+
+	if err := DecodeDMLBodyInto(b, body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// DecodeDMLBodyInto parses a DML body map at b[0:] into dst. It is the
+// zero-allocation core of DecodeDMLBody: a hot loop can decode every body
+// into one caller-owned DMLBody. It first resets dst to the zero DMLBody, so
+// a reused dst carries no field of a prior row, then sets the fields of the
+// keys b holds. The raw fields of dst (Tuple, Key, Ops, OldTuple, NewTuple,
+// Arrow, the values of Extras) alias b; clone one before retaining it past
+// b's lifetime. A map of a prior row is never reused: a body with a key that
+// has no field allocates a new Extras map. On error dst holds what was
+// decoded before it.
+func DecodeDMLBodyInto(b []byte, dst *DMLBody) error {
+	*dst = DMLBody{}
+
 	if len(b) == 0 {
-		return nil, fmt.Errorf("format: DecodeDMLBody: %w", ErrEmptyBody)
+		return fmt.Errorf("format: DecodeDMLBody: %w", ErrEmptyBody)
 	}
 
 	entries, off, err := readMPMapLen(b)
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeDMLBody: %w", err)
+		return fmt.Errorf("format: DecodeDMLBody: %w", err)
 	}
 
-	body := &DMLBody{}
+	body := dst
 
 	for i := range entries {
 		key, n, err := readMPUint(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeDMLBody: key %d: %w", i, err)
+			return fmt.Errorf("format: DecodeDMLBody: key %d: %w", i, err)
 		}
 
 		off += n
@@ -79,7 +100,7 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 
 		valLen, err := skipMP(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeDMLBody: skip value for key %d: %w", key, err)
+			return fmt.Errorf("format: DecodeDMLBody: skip value for key %d: %w", key, err)
 		}
 
 		val := b[valStart : valStart+valLen]
@@ -89,21 +110,21 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 		case iproto.IPROTO_SPACE_ID:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeDMLBody: space_id: %w", err)
+				return fmt.Errorf("format: DecodeDMLBody: space_id: %w", err)
 			}
 
 			body.SpaceID = uint32(v) //nolint:gosec // G115: space_id is a uint32 field per iproto_constants.h
 		case iproto.IPROTO_INDEX_ID:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeDMLBody: index_id: %w", err)
+				return fmt.Errorf("format: DecodeDMLBody: index_id: %w", err)
 			}
 
 			body.IndexID = uint32(v) //nolint:gosec // G115: index_id is a uint32 field per iproto_constants.h
 		case iproto.IPROTO_INDEX_BASE:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeDMLBody: index_base: %w", err)
+				return fmt.Errorf("format: DecodeDMLBody: index_base: %w", err)
 			}
 
 			body.IndexBase = uint32(v) //nolint:gosec // G115: index_base is a uint32 field per iproto_constants.h
@@ -128,5 +149,5 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 		}
 	}
 
-	return body, nil
+	return nil
 }

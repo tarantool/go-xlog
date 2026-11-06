@@ -45,6 +45,17 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   `DMLBody.Ops`) into `[]Operation`: the opcode, the field by number or by
   name, the splice position and offset, and the value as raw msgpack
   aliasing the body.
+- format: `DecodeDMLBodyInto`, `DecodeRaftBodyInto`, `DecodeSynchroBodyInto`,
+  `DecodeVyLogBodyInto`, `DecodeVyStmtBodyInto`, `DecodeVyRunInfoBodyInto`
+  and `DecodeVyPageInfoBodyInto` decode a body into a caller-owned struct, as
+  `DecodeXRowInto` does a row. Each first resets the struct, so a reused one
+  carries no field of a prior row; its raw fields alias the body. A DML body,
+  a RAFT body without a vclock, a CONFIRM/ROLLBACK and the vinyl run and
+  index bodies decode with no allocation; a vclock, the keys of a vinyl log
+  record and an unknown key still allocate their map (`VClockArray` is the
+  allocation-free vclock). The `Decode*Body` functions are now wrappers
+  allocating the struct, and `DecodeVyRunInfoBody`/`DecodeVyPageInfoBody` no
+  longer allocate a map to check their mandatory keys.
 
 ### Changed
 
