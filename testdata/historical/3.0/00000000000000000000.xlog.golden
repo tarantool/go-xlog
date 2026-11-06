@@ -6,8 +6,8 @@ row lsn=3 replica=1 type=INSERT tsn=3 commit=true flags=0x01 group=0 ts=1.780264
 row lsn=4 replica=1 type=INSERT tsn=4 commit=true flags=0x01 group=0 ts=1.7802647618963656e+09 dml space=512 tuple=[1,"alpha"]
 row lsn=5 replica=1 type=INSERT tsn=5 commit=true flags=0x01 group=0 ts=1.780264761896388e+09 dml space=512 tuple=[2,"beta"]
 row lsn=6 replica=1 type=REPLACE tsn=6 commit=true flags=0x01 group=0 ts=1.7802647618964097e+09 dml space=512 tuple=[2,"beta2"]
-row lsn=7 replica=1 type=UPDATE tsn=7 commit=true flags=0x01 group=0 ts=1.780264761896444e+09 dml space=512 tuple=[["=",2,"alpha2"]] key=[1] extras={21:1}
-row lsn=8 replica=1 type=UPSERT tsn=8 commit=true flags=0x01 group=0 ts=1.780264761896468e+09 dml space=512 tuple=[3,"gamma"] ops=[["=",2,"gamma2"]] extras={21:1}
+row lsn=7 replica=1 type=UPDATE tsn=7 commit=true flags=0x01 group=0 ts=1.780264761896444e+09 dml space=512 index_base=1 tuple=[["=",2,"alpha2"]] key=[1]
+row lsn=8 replica=1 type=UPSERT tsn=8 commit=true flags=0x01 group=0 ts=1.780264761896468e+09 dml space=512 index_base=1 tuple=[3,"gamma"] ops=[["=",2,"gamma2"]]
 row lsn=9 replica=1 type=DELETE tsn=9 commit=true flags=0x01 group=0 ts=1.7802647618964918e+09 dml space=512 key=[2]
 row lsn=10 replica=1 type=INSERT tsn=10 commit=false flags=0x00 group=0 ts=1.780264761896517e+09 dml space=512 tuple=[10,"tx-a"]
 row lsn=11 replica=1 type=INSERT tsn=10 commit=false flags=0x00 group=0 ts=1.780264761896517e+09 dml space=512 tuple=[11,"tx-b"]

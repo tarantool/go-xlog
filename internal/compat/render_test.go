@@ -93,12 +93,22 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 		}
 
 		out := fmt.Sprintf("dml space=%d", d.SpaceID)
+		if d.IndexID != 0 {
+			out += fmt.Sprintf(" index_id=%d", d.IndexID)
+		}
+
+		if d.IndexBase != 0 {
+			out += fmt.Sprintf(" index_base=%d", d.IndexBase)
+		}
+
 		out += rawField(" tuple=", d.Tuple)
 		out += rawField(" key=", d.Key)
 		out += rawField(" ops=", d.Ops)
 		out += rawField(" old=", d.OldTuple)
 
 		out += rawField(" new=", d.NewTuple)
+		out += rawField(" arrow=", d.Arrow)
+
 		if len(d.Extras) > 0 {
 			out += " extras=" + renderU64Map(d.Extras)
 		}

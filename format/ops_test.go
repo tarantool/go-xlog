@@ -508,7 +508,7 @@ func TestDecodeOps_Fixtures(t *testing.T) {
 				update, err = format.DecodeOps(body.Tuple)
 				require.NoError(t, err, version)
 				// box.space:update numbers fields from 1.
-				assert.Equal(t, []byte{0x01}, body.Extras[uint64(iproto.IPROTO_INDEX_BASE)], version)
+				assert.Equal(t, uint32(1), body.IndexBase, version)
 			case iproto.IPROTO_UPSERT:
 				upsert, err = format.DecodeOps(body.Ops)
 				require.NoError(t, err, version)

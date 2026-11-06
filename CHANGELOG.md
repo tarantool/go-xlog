@@ -48,6 +48,14 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Changed
 
+- **Breaking, silently:** format: `DMLBody` decodes `IPROTO_INDEX_ID`,
+  `IPROTO_INDEX_BASE` and `IPROTO_ARROW` into the new fields `IndexID`,
+  `IndexBase` and `Arrow` (raw msgpack aliasing the body, like `Tuple`), and
+  no longer puts them in `Extras`. Code reading
+  `body.Extras[uint64(iproto.IPROTO_INDEX_ID)]`, `IPROTO_INDEX_BASE` or
+  `IPROTO_ARROW` still compiles but now reads nil: read the typed field
+  instead. Every UPDATE and UPSERT issued from Lua carries `INDEX_BASE`, so
+  this changes the decode of ordinary journal rows.
 - format: `XRow` has new fields. A composite literal of `XRow` without field
   names no longer compiles. A row decoded from bytes that carry the new keys
   no longer compares equal (`==`, `assert.Equal`, as a map key) to a
@@ -61,6 +69,11 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Fixed
 
+- examples/play: an UPDATE or UPSERT row carrying `IPROTO_INDEX_BASE` (every
+  one issued from Lua, base 1) is replayed with its field numbers rebased to
+  0, the base the client sends; they were sent as is, so each operation hit
+  the field after the one it named. A DELETE or UPDATE is replayed on its
+  `IndexID`.
 - format: `DecodeSynchroBody` reads the term of a PROMOTE/DEMOTE row from
   `IPROTO_TERM`, where Tarantool writes it, instead of key 0, which left the
   term zero. The confirmed vclock a PROMOTE/DEMOTE carries (`IPROTO_VCLOCK`,
