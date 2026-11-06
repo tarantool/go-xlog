@@ -43,7 +43,22 @@ var (
 	// ErrNoMeta is returned when a journal file's reader yields no Meta
 	// (the file header could not be parsed into a usable meta block).
 	ErrNoMeta = errors.New("has no meta")
+
+	// ErrNotChain is returned by OpenDir / OpenDirFS for the RUN and INDEX
+	// filetypes. The files of a vinyl run are named by the run id, not by a
+	// vclock signature, and carry no vclock: they do not form a chain to
+	// index. Open them one by one with the reader.
+	ErrNotChain = errors.New("dir: vinyl run files do not form a vclock chain")
 )
+
+// checkChain rejects the filetypes whose files are not a vclock chain.
+func checkChain(filetype format.Filetype) error {
+	if filetype == format.FiletypeRUN || filetype == format.FiletypeINDEX {
+		return fmt.Errorf("%w: %s", ErrNotChain, filetype)
+	}
+
+	return nil
+}
 
 // Dir is an immutable in-memory index of journal files for one filetype
 // inside one directory. Build via OpenDir; use Files / LocateVClock /
@@ -72,10 +87,17 @@ type Dir struct {
 //   - Two indexed files with the same Signature → ErrDuplicate.
 //   - Adjacent entries whose VClock pair is incomparable → ErrIncomparable
 //     (mirrors xdir_index_file's per-pair Lamport order assertion).
+//   - FiletypeRUN / FiletypeINDEX → ErrNotChain: vinyl run files are named
+//     by run id and carry no vclock.
 //
 // On success the returned Dir contains the entries sorted ascending by
 // Signature (which is also ascending by VClock.Signature()).
 func OpenDir(path string, filetype format.Filetype) (*Dir, error) {
+	err := checkChain(filetype)
+	if err != nil {
+		return nil, err
+	}
+
 	ext, err := filetype.Ext()
 	if err != nil {
 		return nil, fmt.Errorf("dir: ext: %w", err)
@@ -120,6 +142,11 @@ func OpenDir(path string, filetype format.Filetype) (*Dir, error) {
 // OpenDir (signature match, duplicate-signature and incomparable-vclock
 // rejection); only the listing and opening go through fsys.
 func OpenDirFS(fsys fs.FS, dir string, filetype format.Filetype) (*Dir, error) {
+	err := checkChain(filetype)
+	if err != nil {
+		return nil, err
+	}
+
 	ext, err := filetype.Ext()
 	if err != nil {
 		return nil, fmt.Errorf("dir: ext: %w", err)

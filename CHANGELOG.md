@@ -24,6 +24,9 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 ### Changed
 
 - format: `VyLogBody.Type` is a `VyLogType` instead of a `uint32`.
+- dir: `OpenDir` and `OpenDirFS` refuse the `RUN` and `INDEX` filetypes with
+  `ErrNotChain`: vinyl run files are named by run id and carry no vclock, so
+  they failed with a misleading `ErrSignatureMismatch`.
 
 ### Fixed
 
