@@ -454,3 +454,20 @@ func mpArrayHeader(buf []byte, n int) []byte {
 
 	return append(buf, tmp[:]...)
 }
+
+// TestOpenDir_RejectsVinylRuns pins that the RUN and INDEX filetypes are
+// refused up front: a vinyl run is named by its id and has no vclock, so the
+// directory of an LSM tree is not a chain.
+func TestOpenDir_RejectsVinylRuns(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+
+	for _, ft := range []format.Filetype{format.FiletypeRUN, format.FiletypeINDEX} {
+		_, err := dir.OpenDir(tmp, ft)
+		require.ErrorIs(t, err, dir.ErrNotChain, ft)
+
+		_, err = dir.OpenDirFS(os.DirFS(tmp), ".", ft)
+		require.ErrorIs(t, err, dir.ErrNotChain, ft)
+	}
+}
