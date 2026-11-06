@@ -11,9 +11,8 @@ import (
 // (and of INSERT_ARROW). Keys come from src/box/iproto_constants.h and are
 // written by Tarantool's xrow_encode_dml (src/box/xrow.c). Each variable-
 // length field (Tuple, Key, Ops, OldTuple, NewTuple, Arrow) is held as raw
-// msgpack that aliases the decoded buffer, so callers who only need the
-// SpaceID pay no decode cost; clone a field before retaining it past the
-// buffer's lifetime.
+// msgpack that aliases the input, so callers who only need the SpaceID pay
+// no decode cost; see Aliasing in the package doc.
 //
 // A body key with no field (IPROTO_TUPLE_META, IPROTO_BEGIN_KEY, ...) is
 // skipped, unless DecodeOptions.OnUnknown of DecodeDMLBodyInto receives it.
@@ -31,20 +30,23 @@ type DMLBody struct {
 	// from Lua carries 1.
 	IndexBase uint32
 	// Tuple is IPROTO_TUPLE, raw msgpack: the tuple of an INSERT, REPLACE or
-	// UPSERT, the operations of an UPDATE.
+	// UPSERT, the operations of an UPDATE. It aliases the input.
 	Tuple []byte
-	// Key is IPROTO_KEY, raw msgpack: the key of an UPDATE or DELETE.
+	// Key is IPROTO_KEY, raw msgpack: the key of an UPDATE or DELETE. It
+	// aliases the input.
 	Key []byte
-	// Ops is IPROTO_OPS, raw msgpack: the operations of an UPSERT.
+	// Ops is IPROTO_OPS, raw msgpack: the operations of an UPSERT. It
+	// aliases the input.
 	Ops []byte
 	// OldTuple is IPROTO_OLD_TUPLE, raw msgpack: the tuple before the change,
-	// written for replica-applied and audited rows.
+	// written for replica-applied and audited rows. It aliases the input.
 	OldTuple []byte
 	// NewTuple is IPROTO_NEW_TUPLE, raw msgpack: the tuple after the change,
-	// written for replica-applied and audited rows.
+	// written for replica-applied and audited rows. It aliases the input.
 	NewTuple []byte
 	// Arrow is IPROTO_ARROW of an INSERT_ARROW, raw msgpack: the whole
-	// MP_EXT value, ext header included, holding the Arrow IPC stream.
+	// MP_EXT value, ext header included, holding the Arrow IPC stream. It
+	// aliases the input.
 	Arrow []byte
 }
 
@@ -70,9 +72,9 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 // into one caller-owned DMLBody. It first resets dst to the zero DMLBody, so
 // a reused dst carries no field of a prior row, then sets the fields of the
 // keys b holds. The raw fields of dst (Tuple, Key, Ops, OldTuple, NewTuple,
-// Arrow) alias b; clone one before retaining it past b's lifetime. A key with
-// no field goes to opts.OnUnknown, or is skipped when opts or its OnUnknown
-// is nil. On error dst holds what was decoded before it.
+// Arrow) alias b; see Aliasing in the package doc. A key with no field goes
+// to opts.OnUnknown, or is skipped when opts or its OnUnknown is nil. On
+// error dst holds what was decoded before it.
 func DecodeDMLBodyInto(b []byte, dst *DMLBody, opts *DecodeOptions) error {
 	*dst = DMLBody{}
 

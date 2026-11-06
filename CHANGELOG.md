@@ -60,6 +60,16 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   functions. Its `OnUnknown` callback receives each body key with no typed
   field and its raw msgpack value, aliasing the body; nil options skip them.
   `CollectUnknown(&m)` returns options gathering them into a map.
+- format: `Clone` and `CloneInto` for `XRow`, `DMLBody`, `RaftBody`,
+  `SynchroBody`, `VyLogBody`, `VyStmtBody`, `VyRunInfo`, `VyPageInfo` and
+  `Operation`, and `CloneOps`/`CloneOpsInto` for a slice of operations.
+  `Clone` returns a deep copy sharing no memory with the buffer the value
+  was decoded from; `CloneInto` copies into a caller-owned value and reuses
+  the capacity of its slices, so retaining a row in a slot of one's own
+  allocates nothing once warm. Nil stays nil and empty stays empty, so a
+  clone equals its source. The package doc now states once that every
+  `[]byte` a decoder returns aliases its input, and names the fields that
+  do on each type.
 
 ### Changed
 

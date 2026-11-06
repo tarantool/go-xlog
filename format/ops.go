@@ -104,7 +104,7 @@ func (c OpCode) arity() int {
 }
 
 // Operation is a decoded update operation. FieldName and Value alias the
-// bytes it was decoded from.
+// input; see Aliasing in the package doc.
 //
 // Field numbers and the splice position are as written in the request.
 // Tarantool subtracts the index base of the request from a non-negative one:
@@ -173,7 +173,8 @@ var (
 // It checks the shape of each operation - its number of elements and the
 // types of its opcode, field and splice arguments - not the type of its
 // value, which Tarantool checks when it applies the operation. Bytes after
-// the array are ignored. The FieldName and Value of every operation alias b.
+// the array are ignored. The FieldName and Value of every operation alias
+// b; see Aliasing in the package doc.
 func DecodeOps(b []byte) ([]Operation, error) {
 	n, off, err := readOpsLen(b)
 	if err != nil {
@@ -193,7 +194,7 @@ func DecodeOps(b []byte) ([]Operation, error) {
 // DecodeOpsInto is DecodeOps decoding into dst[:0], reusing its capacity: it
 // does not allocate when cap(dst) holds every operation. It returns the
 // operations, or dst[:0] and an error. The FieldName and Value of every
-// operation alias b.
+// operation alias b; see Aliasing in the package doc.
 func DecodeOpsInto(b []byte, dst []Operation) ([]Operation, error) {
 	n, off, err := readOpsLen(b)
 	if err != nil {
