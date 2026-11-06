@@ -10,6 +10,11 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Added
 
+- format: `XRow.Sync` and `XRow.SchemaVersion`, the wire-only header keys
+  `IPROTO_SYNC` and `IPROTO_SCHEMA_VERSION`. `DecodeXRowInto` decodes them and
+  `EncodeXRow` emits them iff non-zero, `IPROTO_SYNC` where Tarantool's
+  `xrow_header_encode` writes it (right after the request type) and
+  `IPROTO_SCHEMA_VERSION` right after it.
 - format: `VyLogType`, the type of a vinyl log record, with a constant and a
   name for every record type of Tarantool.
 - format: Typed decoders for the rows of vinyl `.run` and `.index` files:
@@ -34,6 +39,10 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Changed
 
+- format: `XRow` has new fields. A composite literal of `XRow` without field
+  names no longer compiles, and a row decoded from bytes that carry the new
+  keys no longer compares equal (`==`, `assert.Equal`, as a map key) to a
+  hand-built row that leaves them out.
 - format: `VyLogBody.Type` is a `VyLogType` instead of a `uint32`.
 - dir: `OpenDir` and `OpenDirFS` refuse the `RUN` and `INDEX` filetypes with
   `ErrNotChain`: vinyl run files are named by run id and carry no vclock, so

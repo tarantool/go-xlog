@@ -104,3 +104,63 @@ func TestXRow_TimestampRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDeltaf(t, r.Timestamp, got.Timestamp, 1e-9, "Timestamp: got %v want %v", got.Timestamp, r.Timestamp)
 }
+
+// TestEncodeXRow_KeyOrder — every header key in the order xrow_header_encode
+// writes them (src/box/xrow.c:338-452), with IPROTO_SCHEMA_VERSION right after
+// IPROTO_SYNC as in iproto_header_encode, and the row decodes back whole.
+func TestEncodeXRow_KeyOrder(t *testing.T) {
+	t.Parallel()
+
+	r := &format.XRow{
+		Type: iproto.IPROTO_INSERT, Sync: 5, SchemaVersion: 6, ReplicaID: 3, GroupID: 1,
+		LSN: 11, TSN: 10, Timestamp: 1.5, StreamID: 7,
+		Flags: iproto.IPROTO_FLAG_COMMIT | iproto.IPROTO_FLAG_WAIT_SYNC, BodyRaw: []byte{0x80},
+	}
+
+	want := []byte{
+		0x8a,       // fixmap, 10 entries
+		0x00, 0x02, // IPROTO_REQUEST_TYPE: IPROTO_INSERT
+		0x01, 0x05, // IPROTO_SYNC
+		0x05, 0x06, // IPROTO_SCHEMA_VERSION
+		0x02, 0x03, // IPROTO_REPLICA_ID
+		0x07, 0x01, // IPROTO_GROUP_ID
+		0x03, 0x0b, // IPROTO_LSN
+		0x04, 0xcb, 0x3f, 0xf8, 0, 0, 0, 0, 0, 0, // IPROTO_TIMESTAMP: float64 1.5
+		0x08, 0x01, // IPROTO_TSN: LSN - TSN
+		0x0a, 0x07, // IPROTO_STREAM_ID
+		0x09, 0x03, // IPROTO_FLAGS: COMMIT (last row of a multi-row tx) | WAIT_SYNC
+		0x80, // body
+	}
+
+	buf, err := format.EncodeXRow(nil, r)
+	require.NoError(t, err)
+	assert.Equal(t, want, buf)
+
+	got, n, err := format.DecodeXRow(buf)
+	require.NoError(t, err)
+	assert.Equal(t, len(buf), n)
+	assert.Equal(t, r, got)
+}
+
+// TestXRow_SyncSchemaVersion_OmittedWhenZero — like every optional key,
+// IPROTO_SYNC and IPROTO_SCHEMA_VERSION are emitted iff non-zero.
+func TestXRow_SyncSchemaVersion_OmittedWhenZero(t *testing.T) {
+	t.Parallel()
+
+	r := &format.XRow{Type: iproto.IPROTO_INSERT, BodyRaw: []byte{0x80}}
+
+	buf, err := format.EncodeXRow(nil, r)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x81, 0x00, 0x02, 0x80}, buf, "only IPROTO_REQUEST_TYPE")
+
+	r.Sync = 1 << 40
+	r.SchemaVersion = 300
+
+	buf, err = format.EncodeXRow(nil, r)
+	require.NoError(t, err)
+
+	got, _, err := format.DecodeXRow(buf)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1<<40), got.Sync)
+	assert.Equal(t, uint64(300), got.SchemaVersion)
+}
