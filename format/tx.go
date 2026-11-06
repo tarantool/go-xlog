@@ -123,9 +123,8 @@ func AppendFramedBlock(dst, plain []byte, c Compression) ([]byte, error) {
 //   - n:         total bytes consumed from b (fixheader + on-disk payload)
 //   - err:       on CRC mismatch, malformed header, or truncated input
 //
-// rowSlices aliases plain — callers that retain row slices past plain's
-// lifetime must clone them. The plain slice may be a fresh allocation
-// (for zrow blocks) or alias the input (for row blocks).
+// rowSlices aliases plain, and plain is a fresh allocation for a zrow block
+// and aliases b for a row block; see Aliasing in the package doc.
 func DecodeTxBlock(b []byte) ([][]byte, []byte, int, error) {
 	if len(b) < FixheaderSize {
 		return nil, nil, 0, fmt.Errorf("%w: need %d bytes for fixheader, have %d", ErrShortFixheader, FixheaderSize, len(b))

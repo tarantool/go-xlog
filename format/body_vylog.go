@@ -82,7 +82,8 @@ type VyLogBody struct {
 	// Type is the record type.
 	Type VyLogType
 	// Keys holds every field of the record as raw msgpack, keyed by
-	// vy_log_key. The caller decodes the fields it needs lazily.
+	// vy_log_key. The caller decodes the fields it needs lazily. Its values
+	// alias the input.
 	Keys map[VyKey][]byte
 }
 
@@ -101,11 +102,11 @@ func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
 
 // DecodeVyLogBodyInto parses a VYLOG row body into dst, the core of
 // DecodeVyLogBody. It first resets dst to the zero VyLogBody, so a dst reused
-// across rows carries no field of a prior row. The values of Keys alias b.
-// A body key other than IPROTO_TUPLE goes to opts.OnUnknown, or is skipped
-// when opts or its OnUnknown is nil. The Keys map of a prior row is never
-// reused: every record allocates a new one. On error dst holds what was
-// decoded before it.
+// across rows carries no field of a prior row. The values of Keys alias b;
+// see Aliasing in the package doc. A body key other than IPROTO_TUPLE goes
+// to opts.OnUnknown, or is skipped when opts or its OnUnknown is nil. The
+// Keys map of a prior row is never reused: every record allocates a new
+// one. On error dst holds what was decoded before it.
 func DecodeVyLogBodyInto(b []byte, dst *VyLogBody, opts *DecodeOptions) error {
 	*dst = VyLogBody{}
 

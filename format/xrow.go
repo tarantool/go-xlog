@@ -14,8 +14,8 @@ import (
 // header map (src/box/xrow.c:272-282). All other types carry exactly one
 // body map immediately after the header.
 //
-// BodyRaw holds the body map bytes verbatim (decoded on demand). For
-// NOP rows it is nil.
+// BodyRaw holds the body map bytes verbatim (decoded on demand). It aliases
+// the input. For NOP rows it is nil.
 type XRow struct {
 	Type      iproto.Type
 	ReplicaID uint32
@@ -275,7 +275,8 @@ func EncodeXRow(buf []byte, r *XRow) ([]byte, error) {
 // TSN = LSN and Flags |= IPROTO_FLAG_COMMIT.
 //
 // The row's Present records the header keys found on the wire; the TSN and
-// IPROTO_FLAG_COMMIT inferred for a single-statement row set no bit.
+// IPROTO_FLAG_COMMIT inferred for a single-statement row set no bit. Its
+// BodyRaw aliases b; see Aliasing in the package doc.
 func DecodeXRow(b []byte) (*XRow, int, error) {
 	r := &XRow{}
 
@@ -293,8 +294,8 @@ func DecodeXRow(b []byte) (*XRow, int, error) {
 // carries no state from a prior row), and returns the number of bytes
 // consumed. It is the zero-allocation core of DecodeXRow: a hot read loop can
 // reuse a single *XRow — or an arena slot — across rows with no per-row heap
-// allocation. As with DecodeXRow, dst.BodyRaw aliases b; clone it before
-// retaining past b's lifetime.
+// allocation. As with DecodeXRow, dst.BodyRaw aliases b; see Aliasing in the
+// package doc.
 func DecodeXRowInto(b []byte, dst *XRow) (int, error) {
 	if len(b) == 0 {
 		return 0, fmt.Errorf("format: DecodeXRow: %w", ErrEmptyXRowInput)
@@ -453,9 +454,8 @@ func DecodeXRowInto(b []byte, dst *XRow) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("format: DecodeXRow: body: %w", err)
 	}
-	// Copy or alias? The format package returns a sub-slice of the input;
-	// callers who keep it past the input's lifetime must clone. This keeps
-	// us zero-copy on the hot path.
+	// A sub-slice of the input, not a copy: the aliasing contract of the
+	// package doc, which keeps the hot path zero-copy.
 	r.BodyRaw = b[off : off+bodyLen]
 	off += bodyLen
 

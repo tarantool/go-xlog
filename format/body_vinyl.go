@@ -105,16 +105,17 @@ type VyStmtBody struct {
 	// Tuple is the IPROTO_TUPLE of an INSERT, REPLACE or UPSERT, raw msgpack.
 	// In a primary index run it is the whole tuple; in a secondary index run
 	// it is the key of the tuple: the parts of the secondary index followed
-	// by those of the primary one.
+	// by those of the primary one. It aliases the input.
 	Tuple []byte
 	// Key is the IPROTO_KEY of a DELETE, raw msgpack: the key the DELETE
-	// removes, in the parts of the index (as Tuple of a secondary index).
+	// removes, in the parts of the index (as Tuple of a secondary index). It
+	// aliases the input.
 	Key []byte
 	// Ops is the IPROTO_OPS of an UPSERT, raw msgpack. Unlike the operations
 	// of an UPSERT request it is an array of operation lists, one per UPSERT
 	// squashed into the statement, oldest first: when the key does not exist,
 	// Tuple is inserted and the first list is not applied, and each other list
-	// is applied in turn. Field numbers are 0-based.
+	// is applied in turn. Field numbers are 0-based. It aliases the input.
 	Ops []byte
 	// Flags are the statement flags of IPROTO_TUPLE_META.
 	Flags VyStmtFlags
@@ -137,10 +138,9 @@ func DecodeVyStmtBody(b []byte) (*VyStmtBody, error) {
 // dst, the zero-allocation core of DecodeVyStmtBody. It first resets dst to
 // the zero VyStmtBody, so a dst reused across statements carries no field of
 // a prior one, then sets the fields of the keys b holds. The raw fields of
-// dst (Tuple, Key, Ops) alias b; clone one before retaining it past b's
-// lifetime. A body key with no field goes to opts.OnUnknown, or is skipped
-// when opts or its OnUnknown is nil. On error dst holds what was decoded
-// before it.
+// dst (Tuple, Key, Ops) alias b; see Aliasing in the package doc. A body key
+// with no field goes to opts.OnUnknown, or is skipped when opts or its
+// OnUnknown is nil. On error dst holds what was decoded before it.
 func DecodeVyStmtBodyInto(b []byte, dst *VyStmtBody, opts *DecodeOptions) error {
 	*dst = VyStmtBody{}
 	body := dst
@@ -210,7 +210,7 @@ type VyStmtStat struct {
 // .index file (vy_run_info_encode, src/box/vy_run.c).
 type VyRunInfo struct {
 	// MinKey and MaxKey are the smallest and the greatest key of the run,
-	// raw msgpack arrays.
+	// raw msgpack arrays. They alias the input.
 	MinKey []byte
 	MaxKey []byte
 	// MinLSN and MaxLSN bound the LSNs of the statements of the run.
@@ -222,7 +222,8 @@ type VyRunInfo struct {
 	// BloomVersion is the version of the bloom filter: 3 for the current
 	// one, 1 or 2 for the legacy ones, 0 when the run has none.
 	BloomVersion uint8
-	// Bloom is the bloom filter of the keys of the run, raw msgpack.
+	// Bloom is the bloom filter of the keys of the run, raw msgpack. It
+	// aliases the input.
 	Bloom []byte
 	// StmtStat counts the statements of the run by type.
 	StmtStat VyStmtStat
@@ -253,9 +254,9 @@ var vyRunInfoRequired = []vyRequiredKey{
 // dst, the zero-allocation core of DecodeVyRunInfoBody. It first resets dst to
 // the zero VyRunInfo, so a reused dst carries no field of a prior row, then
 // sets the fields of the keys b holds. The raw fields of dst (MinKey, MaxKey,
-// Bloom) alias b; clone one before retaining it past b's lifetime. A key with
-// no field goes to opts.OnUnknown, or is skipped when opts or its OnUnknown is
-// nil. On error dst holds what was decoded before it.
+// Bloom) alias b; see Aliasing in the package doc. A key with no field goes
+// to opts.OnUnknown, or is skipped when opts or its OnUnknown is nil. On
+// error dst holds what was decoded before it.
 func DecodeVyRunInfoBodyInto(b []byte, dst *VyRunInfo, opts *DecodeOptions) error {
 	const name = "DecodeVyRunInfoBody"
 
@@ -362,7 +363,8 @@ type VyPageInfo struct {
 	UnpackedSize uint32
 	// RowCount is the number of statements of the page.
 	RowCount uint32
-	// MinKey is the smallest key of the page, a raw msgpack array.
+	// MinKey is the smallest key of the page, a raw msgpack array. It
+	// aliases the input.
 	MinKey []byte
 	// RowIndexOffset is the offset of the VY_RUN_ROW_INDEX row in the rows of
 	// the page, uncompressed.
@@ -393,10 +395,10 @@ var vyPageInfoRequired = []vyRequiredKey{
 // DecodeVyPageInfoBodyInto parses the body of a VY_INDEX_PAGE_INFO row into
 // dst, the zero-allocation core of DecodeVyPageInfoBody. It first resets dst
 // to the zero VyPageInfo, so a reused dst carries no field of a prior row,
-// then sets the fields of the keys b holds. MinKey aliases b; clone it before
-// retaining it past b's lifetime. A key with no field goes to opts.OnUnknown,
-// or is skipped when opts or its OnUnknown is nil. On error dst holds what
-// was decoded before it.
+// then sets the fields of the keys b holds. MinKey aliases b; see Aliasing
+// in the package doc. A key with no field goes to opts.OnUnknown, or is
+// skipped when opts or its OnUnknown is nil. On error dst holds what was
+// decoded before it.
 func DecodeVyPageInfoBodyInto(b []byte, dst *VyPageInfo, opts *DecodeOptions) error {
 	const name = "DecodeVyPageInfoBody"
 
