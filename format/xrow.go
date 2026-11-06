@@ -30,10 +30,21 @@ type XRow struct {
 	Flags    iproto.Flag
 	BodyRaw  []byte
 	StreamID uint64 // Optional, wire-only; usually zero in xlog.
+	// Sync is IPROTO_SYNC, the id that correlates an IPROTO request with its
+	// response. Wire-only: a row written to an xlog carries none.
+	Sync uint64
+	// SchemaVersion is IPROTO_SCHEMA_VERSION, the schema version a response
+	// (or a request that checks it) carries. Wire-only, like Sync.
+	SchemaVersion uint64
 }
 
 // IsCommit reports whether IPROTO_FLAG_COMMIT is set on r.
 func (r *XRow) IsCommit() bool { return r.Flags&iproto.IPROTO_FLAG_COMMIT != 0 }
+
+// xrowHeaderKeys is the number of header keys EncodeXRow can emit:
+// REQUEST_TYPE, SYNC, SCHEMA_VERSION, REPLICA_ID, GROUP_ID, LSN, TIMESTAMP,
+// TSN, STREAM_ID and FLAGS.
+const xrowHeaderKeys = 10
 
 // Sentinel errors for xrow encode/decode.
 var (
@@ -50,7 +61,8 @@ var (
 // Encoding rules (src/box/xrow.c:402-410):
 //
 //   - IPROTO_REQUEST_TYPE is always present.
-//   - IPROTO_REPLICA_ID / IPROTO_LSN / IPROTO_GROUP_ID / IPROTO_TIMESTAMP present iff nonzero.
+//   - IPROTO_SYNC / IPROTO_SCHEMA_VERSION / IPROTO_REPLICA_ID / IPROTO_LSN /
+//     IPROTO_GROUP_ID / IPROTO_TIMESTAMP / IPROTO_STREAM_ID present iff nonzero.
 //   - Single-statement tx (TSN == LSN && IsCommit && TSN != 0):
 //     omit IPROTO_TSN AND clear IPROTO_FLAG_COMMIT in the encoded flags.
 //   - Multi-statement tx (TSN != LSN || !IsCommit):
@@ -71,13 +83,21 @@ var (
 // single-stmt tx). The writer package's assignTxIDs avoids this by setting
 // TSN = rows[0].LSN before encoding; callers using EncodeXRow directly
 // must ensure rows in a multi-row tx have non-zero LSN.
+//
+// The keys are emitted in the order of xrow_header_encode
+// (src/box/xrow.c:338-452): REQUEST_TYPE, SYNC, REPLICA_ID, GROUP_ID, LSN,
+// TIMESTAMP, TSN, STREAM_ID, FLAGS, so a header Tarantool would write encodes
+// to the same bytes. xrow_header_encode never writes IPROTO_SCHEMA_VERSION;
+// only iproto_header_encode (src/box/xrow.c:497-515) does, in a response
+// header, right after IPROTO_SYNC, so EncodeXRow emits it there too.
 func EncodeXRow(buf []byte, r *XRow) ([]byte, error) {
 	if r == nil {
 		return nil, fmt.Errorf("format: EncodeXRow: %w", ErrNilRow)
 	}
 	// Decide which fields are present and at what size.
-	// We use a small fixed slice rather than allocating a slice of pairs.
-	var hdr [10]struct {
+	// We use a small fixed array rather than allocating a slice of pairs; it
+	// holds one entry per header key the encoder can emit.
+	var hdr [xrowHeaderKeys]struct {
 		key iproto.Key
 		fn  func([]byte) []byte
 	}
@@ -90,6 +110,18 @@ func EncodeXRow(buf []byte, r *XRow) ([]byte, error) {
 	}
 
 	add(iproto.IPROTO_REQUEST_TYPE, func(b []byte) []byte { return appendMPUint(b, uint64(r.Type)) }) //nolint:gosec // G115: request type is a small protocol number
+
+	if r.Sync != 0 {
+		sync := r.Sync
+
+		add(iproto.IPROTO_SYNC, func(b []byte) []byte { return appendMPUint(b, sync) })
+	}
+
+	if r.SchemaVersion != 0 {
+		sv := r.SchemaVersion
+
+		add(iproto.IPROTO_SCHEMA_VERSION, func(b []byte) []byte { return appendMPUint(b, sv) })
+	}
 
 	if r.ReplicaID != 0 {
 		add(iproto.IPROTO_REPLICA_ID, func(b []byte) []byte { return appendMPUint(b, uint64(r.ReplicaID)) })
@@ -172,7 +204,8 @@ func DecodeXRow(b []byte) (*XRow, int, error) {
 }
 
 // DecodeXRowInto parses one xrow record at b[0:] into dst, fully overwriting
-// every field (including zeroing BodyRaw / StreamID / Flags so a reused dst
+// every field (including zeroing BodyRaw / StreamID / Sync / SchemaVersion /
+// Flags so a reused dst
 // carries no state from a prior row), and returns the number of bytes
 // consumed. It is the zero-allocation core of DecodeXRow: a hot read loop can
 // reuse a single *XRow — or an arena slot — across rows with no per-row heap
@@ -212,6 +245,14 @@ func DecodeXRowInto(b []byte, dst *XRow) (int, error) {
 
 			r.Type = iproto.Type(v) //nolint:gosec // G115: request type is a small enum bounded by iproto.Type
 			off += n
+		case iproto.IPROTO_SYNC:
+			v, n, err := readMPUint(b[off:])
+			if err != nil {
+				return 0, fmt.Errorf("format: DecodeXRow: sync: %w", err)
+			}
+
+			r.Sync = v
+			off += n
 		case iproto.IPROTO_REPLICA_ID:
 			v, n, err := readMPUint(b[off:])
 			if err != nil {
@@ -243,6 +284,14 @@ func DecodeXRowInto(b []byte, dst *XRow) (int, error) {
 			}
 
 			r.Timestamp = v
+			off += n
+		case iproto.IPROTO_SCHEMA_VERSION:
+			v, n, err := readMPUint(b[off:])
+			if err != nil {
+				return 0, fmt.Errorf("format: DecodeXRow: schema_version: %w", err)
+			}
+
+			r.SchemaVersion = v
 			off += n
 		case iproto.IPROTO_TSN:
 			v, n, err := readMPUint(b[off:])

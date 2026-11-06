@@ -38,10 +38,12 @@ func TestDecodeXRowInto_MatchesDecodeXRow(t *testing.T) {
 func TestDecodeXRowInto_NoFieldBleed(t *testing.T) {
 	t.Parallel()
 
-	// Row A: rich — replica, group, stream, extra flags, body.
+	// Row A: rich — replica, group, stream, sync, schema version, extra
+	// flags, body.
 	rowA := &format.XRow{
 		Type: iproto.IPROTO_INSERT, ReplicaID: 3, GroupID: 1, LSN: 10, TSN: 10,
-		Flags: iproto.IPROTO_FLAG_COMMIT | 0x02, StreamID: 99, BodyRaw: benchBody(8),
+		Flags: iproto.IPROTO_FLAG_COMMIT | 0x02, StreamID: 99, Sync: 5, SchemaVersion: 6,
+		BodyRaw: benchBody(8),
 	}
 	// Row B: sparse single-stmt insert — none of A's optional fields.
 	rowB := &format.XRow{Type: iproto.IPROTO_INSERT, LSN: 11, TSN: 11, Flags: iproto.IPROTO_FLAG_COMMIT, BodyRaw: benchBody(8)}
@@ -57,6 +59,8 @@ func TestDecodeXRowInto_NoFieldBleed(t *testing.T) {
 	_, err = format.DecodeXRowInto(encA, &dst)
 	require.NoError(t, err)
 	require.NotZero(t, dst.StreamID, "row A should set StreamID")
+	require.NotZero(t, dst.Sync, "row A should set Sync")
+	require.NotZero(t, dst.SchemaVersion, "row A should set SchemaVersion")
 
 	// Decode B into the SAME dst — its zero fields must come back zero.
 	_, err = format.DecodeXRowInto(encB, &dst)
@@ -68,6 +72,31 @@ func TestDecodeXRowInto_NoFieldBleed(t *testing.T) {
 	assert.Zero(t, dst.StreamID, "StreamID must not bleed from row A")
 	assert.Zero(t, dst.ReplicaID, "ReplicaID must not bleed from row A")
 	assert.Zero(t, dst.GroupID, "GroupID must not bleed from row A")
+	assert.Zero(t, dst.Sync, "Sync must not bleed from row A")
+	assert.Zero(t, dst.SchemaVersion, "SchemaVersion must not bleed from row A")
+}
+
+// TestXRow_ZeroAlloc is not parallel: AllocsPerRun counts the mallocs of the
+// whole process. A row with every header key fills the encoder's whole fixed
+// key table, and neither direction allocates.
+func TestXRow_ZeroAlloc(t *testing.T) { //nolint:paralleltest // AllocsPerRun counts process-wide mallocs
+	row := benchFullRow()
+	buf := make([]byte, 0, 256)
+
+	encAllocs := testing.AllocsPerRun(100, func() {
+		buf, _ = format.EncodeXRow(buf[:0], row)
+	})
+	assert.Zero(t, encAllocs, "EncodeXRow allocs")
+
+	enc := append([]byte(nil), buf...)
+
+	var dst format.XRow
+
+	decAllocs := testing.AllocsPerRun(100, func() {
+		_, _ = format.DecodeXRowInto(enc, &dst)
+	})
+	assert.Zero(t, decAllocs, "DecodeXRowInto allocs")
+	assert.Equal(t, *row, dst, "full row round-trips")
 }
 
 // TestAppendTxBlock_MatchesEncodeTxBlock — byte-for-byte identical output, and

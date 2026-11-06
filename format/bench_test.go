@@ -67,3 +67,68 @@ func BenchmarkDecodeXRow(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkDecodeXRowInto(b *testing.B) {
+	row := benchRow()
+
+	enc, err := format.EncodeXRow(nil, row)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var dst format.XRow
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		if _, err := format.DecodeXRowInto(enc, &dst); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// benchFullRow sets every header field EncodeXRow emits, so the encoder fills
+// its whole fixed key table.
+func benchFullRow() *format.XRow {
+	return &format.XRow{
+		Type: iproto.IPROTO_INSERT, ReplicaID: 3, GroupID: 1, LSN: 43, TSN: 42,
+		Timestamp: 1.5, Flags: iproto.IPROTO_FLAG_COMMIT | iproto.IPROTO_FLAG_WAIT_SYNC,
+		StreamID: 7, Sync: 5, SchemaVersion: 6, BodyRaw: benchBody(64),
+	}
+}
+
+func BenchmarkEncodeXRowFullHeader(b *testing.B) {
+	row := benchFullRow()
+	buf := make([]byte, 0, 256)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		var err error
+
+		buf, err = format.EncodeXRow(buf[:0], row)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecodeXRowIntoFullHeader(b *testing.B) {
+	enc, err := format.EncodeXRow(nil, benchFullRow())
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var dst format.XRow
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		if _, err := format.DecodeXRowInto(enc, &dst); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
