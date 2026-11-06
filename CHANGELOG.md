@@ -20,6 +20,12 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   of an index file. `TypeName` names their row types (`VY_INDEX_RUN_INFO`,
   `VY_INDEX_PAGE_INFO`, `VY_RUN_ROW_INDEX`) `RUNINFO`, `PAGEINFO` and
   `ROWINDEX`, as Tarantool does.
+- format: `VClockArray`, a dense vclock of `VClockMax` (32, Tarantool's
+  `VCLOCK_MAX`) components that copies by value and allocates nothing, with
+  `Get`, `Set`, `Has`, `Len`, `Signature`, `Compare` and `String` agreeing
+  with `VClock`, `DecodeVClockArrayInto` for its msgpack map and the
+  converters `VClockArray.VClock` and `VClockArrayFrom`. A replica id
+  `>= VClockMax` fails with `ErrVClockReplicaID`. `VClock` is unchanged.
 
 ### Changed
 

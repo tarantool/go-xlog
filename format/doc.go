@@ -15,6 +15,7 @@
 //   - CRC32C:      src/box/xlog.c:1086, src/lib/digest/crc32_impl.c:196-205
 //   - vy_log keys: src/box/vy_log.c:71-89
 //   - vinyl runs:  src/box/vy_run.c, src/box/vy_stmt.c
+//   - vclock:      src/lib/vclock/vclock.h:54-80, src/lib/vclock/vclock.c:55-72
 //
 // No I/O. No global mutable state (sync.Pool instances are construction caches,
 // not state).
