@@ -74,9 +74,9 @@ func renderRow(ft format.Filetype, r format.XRow) string {
 		b.WriteString(" " + renderJournalBody(r.Type, r.BodyRaw))
 	case format.FiletypeVYLOG, format.FiletypeRUN, format.FiletypeINDEX:
 		// Vinyl artefacts, no iproto row semantics.
-		fmt.Fprintf(&b, " type=%d %s", r.Type, renderStorageBody(ft, r.BodyRaw))
+		fmt.Fprintf(&b, " type=%d %s", r.Type, renderStorageBody(ft, r.Type, r.BodyRaw))
 	default:
-		fmt.Fprintf(&b, " type=%d %s", r.Type, renderStorageBody(ft, r.BodyRaw))
+		fmt.Fprintf(&b, " type=%d %s", r.Type, renderStorageBody(ft, r.Type, r.BodyRaw))
 	}
 
 	return b.String()
@@ -143,9 +143,53 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 	}
 }
 
-// renderStorageBody renders a vinyl-artefact row body. VYLOG rows have a typed
-// record decoder; RUN/INDEX bodies are rendered as canonical msgpack.
-func renderStorageBody(ft format.Filetype, body []byte) string {
+// renderStorageBody renders a vinyl-artefact row body with the typed decoder
+// of its file and row type: a VYLOG record, a RUN statement or row index, an
+// INDEX run or page info. Any other body is rendered as canonical msgpack.
+func renderStorageBody(ft format.Filetype, typ iproto.Type, body []byte) string {
+	switch {
+	case ft == format.FiletypeRUN && typ == iproto.VY_RUN_ROW_INDEX:
+		offsets, err := format.DecodeVyRowIndexBody(body)
+		if err != nil {
+			return "!decode-error: row index: " + err.Error()
+		}
+
+		return fmt.Sprintf("rowindex offsets=%v", offsets)
+	case ft == format.FiletypeRUN:
+		d, err := format.DecodeVyStmtBody(body)
+		if err != nil {
+			return "!decode-error: stmt: " + err.Error()
+		}
+
+		out := fmt.Sprintf("stmt space=%d flags=%d", d.SpaceID, d.Flags)
+		out += rawField(" tuple=", d.Tuple)
+		out += rawField(" key=", d.Key)
+		out += rawField(" ops=", d.Ops)
+
+		if len(d.Extras) > 0 {
+			out += " extras=" + renderU64Map(d.Extras)
+		}
+
+		return out
+	case ft == format.FiletypeINDEX && typ == iproto.VY_INDEX_RUN_INFO:
+		d, err := format.DecodeVyRunInfoBody(body)
+		if err != nil {
+			return "!decode-error: run info: " + err.Error()
+		}
+
+		return fmt.Sprintf("runinfo min_key=%s max_key=%s min_lsn=%d max_lsn=%d pages=%d bloom=v%d/%dB stat=%+v",
+			renderMP(d.MinKey), renderMP(d.MaxKey), d.MinLSN, d.MaxLSN, d.PageCount,
+			d.BloomVersion, len(d.Bloom), d.StmtStat)
+	case ft == format.FiletypeINDEX && typ == iproto.VY_INDEX_PAGE_INFO:
+		d, err := format.DecodeVyPageInfoBody(body)
+		if err != nil {
+			return "!decode-error: page info: " + err.Error()
+		}
+
+		return fmt.Sprintf("pageinfo offset=%d size=%d unpacked=%d rows=%d min_key=%s row_index_offset=%d",
+			d.Offset, d.Size, d.UnpackedSize, d.RowCount, renderMP(d.MinKey), d.RowIndexOffset)
+	}
+
 	if ft == format.FiletypeVYLOG {
 		d, err := format.DecodeVyLogBody(body)
 		if err != nil {

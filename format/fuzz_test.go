@@ -204,3 +204,35 @@ func FuzzDecodeFixheader(f *testing.F) {
 		require.Equal(t, *h, *h2, "fixheader did not survive a decode/encode round trip")
 	})
 }
+
+func FuzzDecodeVyStmtBody(f *testing.F) {
+	f.Add([]byte{0x82, 0x21, 0x91, 0x01, 0x2a, 0x81, 0x01, 0x01}) // {tuple: [1], tuple_meta: {flags: 1}}.
+	f.Add([]byte{})
+	f.Fuzz(func(_ *testing.T, b []byte) {
+		_, _ = format.DecodeVyStmtBody(b)
+	})
+}
+
+func FuzzDecodeVyRunInfoBody(f *testing.F) {
+	f.Add([]byte{0x85, 0x01, 0x91, 0x01, 0x02, 0x91, 0x02, 0x03, 0x01, 0x04, 0x02, 0x05, 0x01})
+	f.Add([]byte{})
+	f.Fuzz(func(_ *testing.T, b []byte) {
+		_, _ = format.DecodeVyRunInfoBody(b)
+	})
+}
+
+func FuzzDecodeVyPageInfoBody(f *testing.F) {
+	f.Add([]byte{0x86, 0x01, 0x58, 0x02, 0x10, 0x03, 0x10, 0x04, 0x01, 0x05, 0x91, 0x01, 0x06, 0x08})
+	f.Add([]byte{})
+	f.Fuzz(func(_ *testing.T, b []byte) {
+		_, _ = format.DecodeVyPageInfoBody(b)
+	})
+}
+
+func FuzzDecodeVyRowIndexBody(f *testing.F) {
+	f.Add([]byte{0x81, 0x01, 0xc4, 0x04, 0x00, 0x00, 0x00, 0x00}) // {data: [0]}.
+	f.Add([]byte{})
+	f.Fuzz(func(_ *testing.T, b []byte) {
+		_, _ = format.DecodeVyRowIndexBody(b)
+	})
+}

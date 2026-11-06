@@ -130,3 +130,19 @@ func ExampleCRC32C() {
 	// true
 	// false
 }
+
+// ExampleDecodeVyStmtBody decodes a DELETE statement of a vinyl run: the key
+// it deletes and the flag that it did not delete the old tuple from the
+// secondary indexes, as Tarantool writes it for a space with defer_deletes.
+func ExampleDecodeVyStmtBody() {
+	// {IPROTO_KEY: [2], IPROTO_TUPLE_META: {VY_STMT_FLAGS: 1}}
+	raw := []byte{0x82, 0x20, 0x91, 0x02, 0x2a, 0x81, 0x01, 0x01}
+
+	stmt, err := format.DecodeVyStmtBody(raw)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("key=%x deferred_delete=%t\n", stmt.Key, stmt.Flags&format.VyStmtDeferredDelete != 0)
+	// Output: key=9102 deferred_delete=true
+}
