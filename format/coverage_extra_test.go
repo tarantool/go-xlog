@@ -289,16 +289,31 @@ func TestDecodeSynchroBody_AllKeys(t *testing.T) {
 
 	b = append(b, kv(uint64(iproto.IPROTO_REPLICA_ID), mpUint(3))...)
 	b = append(b, kv(uint64(iproto.IPROTO_LSN), mpUint(99))...)
-	b = append(b, kv(uint64(iproto.IPROTO_RAFT_TERM), mpUint(7))...)
+	b = append(b, kv(uint64(iproto.IPROTO_TERM), mpUint(7))...)
+	b = append(b, kv(uint64(iproto.IPROTO_VCLOCK), buildMap(1, kv(1, mpUint(98))))...)
 	b = append(b, kv(0x55, []byte{0x01})...) // extra
-	raw := buildMap(4, b)
+	raw := buildMap(5, b)
 
 	body, err := format.DecodeSynchroBody(raw)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), body.ReplicaID)
 	assert.Equal(t, int64(99), body.LSN)
 	assert.Equal(t, uint64(7), body.Term)
+	assert.Equal(t, format.VClock{1: 98}, body.ConfirmedVClock)
 	require.Contains(t, body.Extras, uint64(0x55))
+}
+
+// TestDecodeSynchroBody_RaftTermKeyIsNotTerm pins that key 0 - the term of a
+// RAFT row body - is not the term of a synchro row, which is IPROTO_TERM.
+func TestDecodeSynchroBody_RaftTermKeyIsNotTerm(t *testing.T) {
+	t.Parallel()
+
+	raw := buildMap(1, kv(uint64(iproto.IPROTO_RAFT_TERM), mpUint(7)))
+
+	body, err := format.DecodeSynchroBody(raw)
+	require.NoError(t, err)
+	assert.Zero(t, body.Term)
+	assert.Contains(t, body.Extras, uint64(iproto.IPROTO_RAFT_TERM))
 }
 
 func TestDecodeSynchroBody_Errors(t *testing.T) {
@@ -344,7 +359,15 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 	t.Run("bad term value", func(t *testing.T) {
 		t.Parallel()
 
-		raw := buildMap(1, kv(uint64(iproto.IPROTO_RAFT_TERM), []byte{0xa1, 'x'}))
+		raw := buildMap(1, kv(uint64(iproto.IPROTO_TERM), []byte{0xa1, 'x'}))
+		_, err := format.DecodeSynchroBody(raw)
+		require.Error(t, err)
+	})
+
+	t.Run("bad vclock value", func(t *testing.T) {
+		t.Parallel()
+
+		raw := buildMap(1, kv(uint64(iproto.IPROTO_VCLOCK), []byte{0xa1, 'x'}))
 		_, err := format.DecodeSynchroBody(raw)
 		require.Error(t, err)
 	})

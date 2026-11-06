@@ -386,4 +386,4 @@ row lsn=383 replica=0 type=INSERT tsn=383 commit=true flags=0x01 group=0 ts=1.78
 row lsn=384 replica=0 type=INSERT tsn=384 commit=true flags=0x01 group=0 ts=1.7802647602942245e+09 dml space=312 tuple=[1,31,"universe",0,4294967295]
 row lsn=385 replica=0 type=INSERT tsn=385 commit=true flags=0x01 group=0 ts=1.7802647602942245e+09 dml space=320 tuple=[1,"6b92b868-4b5e-4832-ae48-cbc33e429b3d"]
 row lsn=386 replica=0 type=RAFT tsn=386 commit=true flags=0x01 group=1 ts=1.7802647602942245e+09 raft term=1 vote=0 state=0 leader=0 leader_seen=false vclock={}
-row lsn=387 replica=0 type=RAFT_PROMOTE tsn=387 commit=true flags=0x01 group=0 ts=1.7802647602942245e+09 synchro replica=0 lsn=0 term=0
+row lsn=387 replica=0 type=RAFT_PROMOTE tsn=387 commit=true flags=0x01 group=0 ts=1.7802647602942245e+09 synchro replica=0 lsn=0 term=0 vclock={}
