@@ -208,33 +208,41 @@ func TestDecodeRaftBody_VClockBadID(t *testing.T) {
 func TestDecodeDMLBody_AllKeys(t *testing.T) {
 	t.Parallel()
 
-	tuple := []byte{0x91, 0x01} // array(1)[1]
-	key := []byte{0x91, 0x02}   // array(1)[2]
-	ops := []byte{0x90}         // array(0)
-	oldT := []byte{0x91, 0x03}  // array(1)[3]
-	newT := []byte{0x91, 0x04}  // array(1)[4]
-	extraV := []byte{0x05}      // fixint
+	tuple := []byte{0x91, 0x01}       // array(1)[1]
+	key := []byte{0x91, 0x02}         // array(1)[2]
+	ops := []byte{0x90}               // array(0)
+	oldT := []byte{0x91, 0x03}        // array(1)[3]
+	newT := []byte{0x91, 0x04}        // array(1)[4]
+	arrow := []byte{0xd4, 0x08, 0xff} // fixext1, type 8 (MP_ARROW)
+	extraV := []byte{0x05}            // fixint
 
 	b := make([]byte, 0, 64)
 
 	b = append(b, kv(uint64(iproto.IPROTO_SPACE_ID), mpUint(512))...)
+	b = append(b, kv(uint64(iproto.IPROTO_INDEX_ID), mpUint(3))...)
+	b = append(b, kv(uint64(iproto.IPROTO_INDEX_BASE), mpUint(1))...)
+	b = append(b, kv(uint64(iproto.IPROTO_ARROW), arrow)...)
 	b = append(b, kv(uint64(iproto.IPROTO_TUPLE), tuple)...)
 	b = append(b, kv(uint64(iproto.IPROTO_KEY), key)...)
 	b = append(b, kv(uint64(iproto.IPROTO_OPS), ops)...)
 	b = append(b, kv(uint64(iproto.IPROTO_OLD_TUPLE), oldT)...)
 	b = append(b, kv(uint64(iproto.IPROTO_NEW_TUPLE), newT)...)
 	b = append(b, kv(0x7e, extraV)...)
-	raw := buildMap(7, b)
+	raw := buildMap(10, b)
 
 	body, err := format.DecodeDMLBody(raw)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(512), body.SpaceID)
+	assert.Equal(t, uint32(3), body.IndexID)
+	assert.Equal(t, uint32(1), body.IndexBase)
 	assert.Equal(t, tuple, body.Tuple)
 	assert.Equal(t, key, body.Key)
 	assert.Equal(t, ops, body.Ops)
 	assert.Equal(t, oldT, body.OldTuple)
 	assert.Equal(t, newT, body.NewTuple)
-	require.Contains(t, body.Extras, uint64(0x7e))
+	assert.Equal(t, arrow, body.Arrow)
+	// The typed keys do not go into Extras: only the unknown one does.
+	assert.Equal(t, map[uint64][]byte{0x7e: extraV}, body.Extras)
 }
 
 func TestDecodeDMLBody_Errors(t *testing.T) {
@@ -276,6 +284,16 @@ func TestDecodeDMLBody_Errors(t *testing.T) {
 		_, err := format.DecodeDMLBody(raw)
 		require.Error(t, err)
 	})
+
+	for _, key := range []iproto.Key{iproto.IPROTO_INDEX_ID, iproto.IPROTO_INDEX_BASE} {
+		t.Run("bad "+key.String()+" value", func(t *testing.T) {
+			t.Parallel()
+
+			raw := buildMap(1, kv(uint64(key), []byte{0xa1, 'x'}))
+			_, err := format.DecodeDMLBody(raw)
+			require.Error(t, err)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------

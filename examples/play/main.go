@@ -164,16 +164,16 @@ func apply(conn *tarantool.Connection, rec checkpoint.Record) (bool, error) {
 	case iproto.IPROTO_REPLACE:
 		req = tarantool.NewReplaceRequest(b.SpaceID).Tuple(raw(b.Tuple))
 	case iproto.IPROTO_DELETE:
-		req = tarantool.NewDeleteRequest(b.SpaceID).Key(raw(b.Key))
+		req = tarantool.NewDeleteRequest(b.SpaceID).Index(b.IndexID).Key(raw(b.Key))
 	case iproto.IPROTO_UPDATE:
 		// For UPDATE the operations travel in the IPROTO_TUPLE field.
-		ops, err := buildOperations(b.Tuple)
+		ops, err := buildOperations(b.Tuple, b.IndexBase)
 		if err != nil {
 			return false, err
 		}
-		req = tarantool.NewUpdateRequest(b.SpaceID).Key(raw(b.Key)).Operations(ops)
+		req = tarantool.NewUpdateRequest(b.SpaceID).Index(b.IndexID).Key(raw(b.Key)).Operations(ops)
 	case iproto.IPROTO_UPSERT:
-		ops, err := buildOperations(b.Ops)
+		ops, err := buildOperations(b.Ops, b.IndexBase)
 		if err != nil {
 			return false, err
 		}
@@ -199,7 +199,10 @@ func raw(b []byte) any {
 
 // buildOperations decodes the on-disk update/upsert operations array and
 // rebuilds it as a *tarantool.Operations, the only shape the client accepts.
-func buildOperations(rawOps []byte) (*tarantool.Operations, error) {
+// base is the IPROTO_INDEX_BASE of the row (1 for a request from Lua): the
+// client sends none, so a field number counted from base is rebased to 0.
+// A negative field number counts from the end and is kept as is.
+func buildOperations(rawOps []byte, base uint32) (*tarantool.Operations, error) {
 	ops := tarantool.NewOperations()
 	if len(rawOps) == 0 {
 		return ops, nil
@@ -219,6 +222,12 @@ func buildOperations(rawOps []byte) (*tarantool.Operations, error) {
 		field, err := toInt(op[1])
 		if err != nil {
 			return nil, fmt.Errorf("operation field: %w", err)
+		}
+		if field >= 0 {
+			if field < int(base) {
+				return nil, fmt.Errorf("operation field %d below index base %d", field, base)
+			}
+			field -= int(base)
 		}
 
 		switch operator {

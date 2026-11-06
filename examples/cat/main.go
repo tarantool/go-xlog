@@ -186,12 +186,19 @@ func bodyMap(b *format.DMLBody) (map[string]any, error) {
 	if b.SpaceID != 0 {
 		m["space_id"] = b.SpaceID
 	}
+	if b.IndexID != 0 {
+		m["index_id"] = b.IndexID
+	}
+	if b.IndexBase != 0 {
+		m["index_base"] = b.IndexBase
+	}
 	for name, raw := range map[string][]byte{
 		"tuple":      b.Tuple,
 		"key":        b.Key,
 		"operations": b.Ops,
 		"old_tuple":  b.OldTuple,
 		"new_tuple":  b.NewTuple,
+		"arrow":      b.Arrow,
 	} {
 		v, err := mpDecode(raw)
 		if err != nil {

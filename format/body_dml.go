@@ -7,20 +7,47 @@ import (
 	"github.com/tarantool/go-iproto"
 )
 
-// DMLBody is the typed body of an INSERT/REPLACE/UPDATE/DELETE/UPSERT row.
-// Keys come from src/box/iproto_constants.h:98-138. We hold each variable-
-// length field (Tuple/Key/Ops/Old/New) as raw msgpack bytes so callers
-// who only need the SpaceID pay no decode cost.
+// DMLBody is the typed body of an INSERT/REPLACE/UPDATE/DELETE/UPSERT row
+// (and of INSERT_ARROW). Keys come from src/box/iproto_constants.h and are
+// written by Tarantool's xrow_encode_dml (src/box/xrow.c). Each variable-
+// length field (Tuple, Key, Ops, OldTuple, NewTuple, Arrow) is held as raw
+// msgpack that aliases the decoded buffer, so callers who only need the
+// SpaceID pay no decode cost; clone a field before retaining it past the
+// buffer's lifetime.
 //
-// Extras captures any unknown body key, preserving it across rewrite paths.
+// Extras captures any other body key, preserving it across rewrite paths.
 type DMLBody struct {
-	SpaceID  uint32
-	Tuple    []byte // IPROTO_TUPLE — INSERT/REPLACE/UPSERT tuple; UPDATE operations (see DecodeOps).
-	Key      []byte // IPROTO_KEY — UPDATE/DELETE.
-	Ops      []byte // IPROTO_OPS — UPSERT operations (see DecodeOps).
-	OldTuple []byte // IPROTO_OLD_TUPLE — replica-applied, audit.
-	NewTuple []byte // IPROTO_NEW_TUPLE — replica-applied, audit.
-	Extras   map[uint64][]byte
+	// SpaceID is IPROTO_SPACE_ID, the space the request applies to.
+	SpaceID uint32
+	// IndexID is IPROTO_INDEX_ID, the index a DELETE or UPDATE looks its key
+	// up in; 0 (the primary index) when the body carries none. Tarantool
+	// rebinds a request on a secondary index to the primary key before it
+	// writes the WAL, so a journal row normally has none.
+	IndexID uint32
+	// IndexBase is IPROTO_INDEX_BASE of an UPDATE or UPSERT: the number of
+	// the first field in the field numbers of Ops (or of Tuple, which holds
+	// the operations of an UPDATE). 0 when the body carries none; a request
+	// from Lua carries 1.
+	IndexBase uint32
+	// Tuple is IPROTO_TUPLE, raw msgpack: the tuple of an INSERT, REPLACE or
+	// UPSERT, the operations of an UPDATE.
+	Tuple []byte
+	// Key is IPROTO_KEY, raw msgpack: the key of an UPDATE or DELETE.
+	Key []byte
+	// Ops is IPROTO_OPS, raw msgpack: the operations of an UPSERT.
+	Ops []byte
+	// OldTuple is IPROTO_OLD_TUPLE, raw msgpack: the tuple before the change,
+	// written for replica-applied and audited rows.
+	OldTuple []byte
+	// NewTuple is IPROTO_NEW_TUPLE, raw msgpack: the tuple after the change,
+	// written for replica-applied and audited rows.
+	NewTuple []byte
+	// Arrow is IPROTO_ARROW of an INSERT_ARROW, raw msgpack: the whole
+	// MP_EXT value, ext header included, holding the Arrow IPC stream.
+	Arrow []byte
+	// Extras holds every other body key as raw msgpack, aliasing the decoded
+	// buffer like the fields above.
+	Extras map[uint64][]byte
 }
 
 // ErrEmptyBody is returned by the body decoders when handed a zero-length
@@ -66,6 +93,20 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 			}
 
 			body.SpaceID = uint32(v) //nolint:gosec // G115: space_id is a uint32 field per iproto_constants.h
+		case iproto.IPROTO_INDEX_ID:
+			v, _, err := readMPUint(val)
+			if err != nil {
+				return nil, fmt.Errorf("format: DecodeDMLBody: index_id: %w", err)
+			}
+
+			body.IndexID = uint32(v) //nolint:gosec // G115: index_id is a uint32 field per iproto_constants.h
+		case iproto.IPROTO_INDEX_BASE:
+			v, _, err := readMPUint(val)
+			if err != nil {
+				return nil, fmt.Errorf("format: DecodeDMLBody: index_base: %w", err)
+			}
+
+			body.IndexBase = uint32(v) //nolint:gosec // G115: index_base is a uint32 field per iproto_constants.h
 		case iproto.IPROTO_TUPLE:
 			body.Tuple = val
 		case iproto.IPROTO_KEY:
@@ -76,6 +117,8 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 			body.OldTuple = val
 		case iproto.IPROTO_NEW_TUPLE:
 			body.NewTuple = val
+		case iproto.IPROTO_ARROW:
+			body.Arrow = val
 		default:
 			if body.Extras == nil {
 				body.Extras = map[uint64][]byte{}

@@ -108,7 +108,7 @@ func (c OpCode) arity() int {
 //
 // Field numbers and the splice position are as written in the request.
 // Tarantool subtracts the index base of the request from a non-negative one:
-// IPROTO_INDEX_BASE (key 0x15, in DMLBody.Extras), which box.space:update and
+// IPROTO_INDEX_BASE (DMLBody.IndexBase), which box.space:update and
 // :upsert set to 1 and which is 0 when absent. A negative one counts from the
 // end, -1 being the last field. The operations of a vinyl run
 // (VyStmtBody.Ops) are 0-based.
