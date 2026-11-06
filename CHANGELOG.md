@@ -26,6 +26,11 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   with `VClock`, `DecodeVClockArrayInto` for its msgpack map and the
   converters `VClockArray.VClock` and `VClockArrayFrom`. A replica id
   `>= VClockMax` fails with `ErrVClockReplicaID`. `VClock` is unchanged.
+- format: `DecodeOps` and the allocation-free `DecodeOpsInto` decode the
+  operations of an UPDATE (its `DMLBody.Tuple`) or an UPSERT (its
+  `DMLBody.Ops`) into `[]Operation`: the opcode, the field by number or by
+  name, the splice position and offset, and the value as raw msgpack
+  aliasing the body.
 
 ### Changed
 
