@@ -27,6 +27,9 @@ func TestTypeName(t *testing.T) {
 		{iproto.IPROTO_RAFT_DEMOTE, "RAFT_DEMOTE"},
 		{iproto.IPROTO_RAFT_CONFIRM, "RAFT_CONFIRM"},
 		{iproto.IPROTO_RAFT_ROLLBACK, "RAFT_ROLLBACK"},
+		{iproto.VY_INDEX_RUN_INFO, "RUNINFO"},
+		{iproto.VY_INDEX_PAGE_INFO, "PAGEINFO"},
+		{iproto.VY_RUN_ROW_INDEX, "ROWINDEX"},
 	}
 	for _, c := range cases {
 		assert.Equalf(t, c.want, format.TypeName(c.typ), "type %d", c.typ)

@@ -401,7 +401,11 @@ types — `Meta`, `XRow`, `VClock`, `Filetype` — and the encode/decode functio
 `EncodeTxBlock`/`DecodeTxBlock`), the magic markers
 (`RowMarker`/`ZRowMarker`/`EOFMarker`), layout/version constants
 (`FixheaderSize`, `CompressThreshold`, `ZstdLevel`, `FormatVersion`), the
-`VyKey*` vinyl-log body keys, and `TypeName`. Request types and IPROTO
+`VyKey*` vinyl-log body keys, and `TypeName`. The typed body decoders cover
+data changes (`DecodeDMLBody`), Raft and synchronous replication rows
+(`DecodeRaftBody`, `DecodeSynchroBody`), vinyl log records (`DecodeVyLogBody`)
+and the rows of vinyl run and index files (`DecodeVyStmtBody`,
+`DecodeVyRowIndexBody`, `DecodeVyRunInfoBody`, `DecodeVyPageInfoBody`). Request types and IPROTO
 header/body keys and flags come from `github.com/tarantool/go-iproto`
 (`iproto.IPROTO_*`). Use it directly if you need to work below the cursor level.
 
@@ -475,7 +479,11 @@ Full API docs:
 
 - **Versions:** writes `0.13`; reads `0.13` by default and `0.12` with
   `AcceptV012()`.
-- **File types:** `XLOG`, `SNAP`, `VYLOG`, `RUN`, `INDEX`.
+- **File types:** `XLOG`, `SNAP`, `VYLOG`, `RUN`, `INDEX`. A `.run` file is
+  pages of the statements of one vinyl index, a page per block; a `.index` file
+  describes the run and its pages. Their rows are not a journal: a statement's
+  LSN is the vclock signature of the transaction that wrote it, and the
+  statements are in key order.
 - **Integrity:** CRC32C (Castagnoli) per transaction block, validated on read,
   computed on write.
 - **Compression:** zstd for transaction payloads over 2 KiB; transparent on both

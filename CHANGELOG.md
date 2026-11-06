@@ -12,6 +12,14 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 - format: `VyLogType`, the type of a vinyl log record, with a constant and a
   name for every record type of Tarantool.
+- format: Typed decoders for the rows of vinyl `.run` and `.index` files:
+  `DecodeVyStmtBody` for the INSERT/REPLACE/DELETE/UPSERT statements of a run
+  (with their `VyStmtFlags`: deferred DELETE, skip read),
+  `DecodeVyRowIndexBody` for the row index that ends each page,
+  `DecodeVyRunInfoBody` and `DecodeVyPageInfoBody` for the run and page infos
+  of an index file. `TypeName` names their row types (`VY_INDEX_RUN_INFO`,
+  `VY_INDEX_PAGE_INFO`, `VY_RUN_ROW_INDEX`) `RUNINFO`, `PAGEINFO` and
+  `ROWINDEX`, as Tarantool does.
 
 ### Changed
 

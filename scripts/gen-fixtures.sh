@@ -9,6 +9,8 @@
 #            vylog_sample.vylog, from scripts/gen.lua
 #   synchro  testdata/synchro/: PROMOTE/CONFIRM/ROLLBACK/DEMOTE rows, from
 #            scripts/gen-synchro.lua
+#   vinyl    testdata/vinyl/: .run/.index files and their .vylog, from
+#            scripts/gen-vinyl.lua
 # With no SET, every set is generated.
 #
 # The script is re-runnable: it always works in a fresh temp dir and
@@ -30,7 +32,7 @@ fi
 
 SETS=( "$@" )
 if (( ${#SETS[@]} == 0 )); then
-    SETS=( journal synchro )
+    SETS=( journal synchro vinyl )
 fi
 
 WORK_ROOT="$(mktemp -d -t go-xlog-fixtures.XXXXXX)"
@@ -56,6 +58,18 @@ gen_synchro() {
     cp -f "${wd}/00000000000000000000.xlog" "${wd}/00000000000000000010.xlog" \
         "${wd}/00000000000000000010.snap" "${out}/"
     echo "==> synchro fixtures:"; ls -la "${out}"
+}
+
+# The vinyl set: every <space>/<index>/<id>.run|.index and the newest .vylog.
+gen_vinyl() {
+    local wd="${WORK_ROOT}/vinyl" out="${TESTDATA_DIR}/vinyl"
+    mkdir -p "${wd}"
+    "${TARANTOOL_BIN}" "${SCRIPT_DIR}/gen-vinyl.lua" "${wd}"
+    rm -rf "${out}"; mkdir -p "${out}"
+    (cd "${wd}" && find . -mindepth 3 -type f \( -name '*.run' -o -name '*.index' \) \
+        | tar cf - -T -) | tar xf - -C "${out}"
+    cp -f "$(printf '%s\n' "${wd}"/*.vylog | sort | tail -1)" "${out}/"
+    echo "==> vinyl fixtures:"; find "${out}" -type f | sort
 }
 
 gen_journal() {
@@ -137,6 +151,7 @@ for set in "${SETS[@]}"; do
     case "${set}" in
         journal) gen_journal ;;
         synchro) gen_synchro ;;
+        vinyl)   gen_vinyl ;;
         *) echo "error: unknown fixture set: ${set}" >&2; exit 1 ;;
     esac
 done

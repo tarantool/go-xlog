@@ -98,12 +98,24 @@ const (
 // iproto.Key / iproto.Type / iproto.Flag / iproto.RaftKey constants
 // (iproto.IPROTO_*) throughout; the format package no longer maintains its own
 // parallel copies. The only protocol numbers kept here are the vy_log body
-// keys below, which go-iproto does not cover.
+// keys below and the keys of the vinyl run and index bodies (body_vinyl.go),
+// which go-iproto does not cover.
 
 // TypeName returns the short Tarantool name of a durable request type
 // ("INSERT", "REPLACE", "RAFT", …). It is iproto.Type.String() with the
-// "IPROTO_" prefix trimmed; unknown types render as iproto's Type(n) form.
+// "IPROTO_" prefix trimmed; the vinyl row types are named as Tarantool's
+// iproto_type_name names them ("RUNINFO", "PAGEINFO", "ROWINDEX"); unknown
+// types render as iproto's Type(n) form.
 func TypeName(t iproto.Type) string {
+	switch t { //nolint:exhaustive // Only the vinyl types, which Tarantool names apart.
+	case iproto.VY_INDEX_RUN_INFO:
+		return "RUNINFO"
+	case iproto.VY_INDEX_PAGE_INFO:
+		return "PAGEINFO"
+	case iproto.VY_RUN_ROW_INDEX:
+		return "ROWINDEX"
+	}
+
 	return strings.TrimPrefix(t.String(), "IPROTO_")
 }
 
