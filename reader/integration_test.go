@@ -60,30 +60,51 @@ func TestOpen_AllFixtures(t *testing.T) {
 	}
 }
 
-// TestVyLog_DecodeFirstBody confirms vylog rows decode through the
-// reader and that the typed body decoder (format.DecodeVyLogBody)
-// accepts the first row's BodyRaw.
-func TestVyLog_DecodeFirstBody(t *testing.T) {
+// TestVyLog_DecodeRealRecords decodes every record of a vinyl log a real
+// Tarantool wrote on creating a vinyl space and dumping it: the record type
+// and the fields come from the [type, {key: value}] tuple of the row.
+func TestVyLog_DecodeRealRecords(t *testing.T) {
 	t.Parallel()
 
-	path := testutil.Path(t, "vylog_sample.vylog")
-	r, err := reader.Open(path)
+	r, err := reader.Open(testutil.Path(t, "vylog_sample.vylog"))
 	require.NoError(t, err)
 
 	defer func() { _ = r.Close() }()
 
 	assert.Equal(t, format.FiletypeVYLOG, r.Meta().Filetype)
-	row, err := r.Next()
-	require.NoError(t, err)
-	require.NotEmpty(t, row.BodyRaw, "first vylog row has empty BodyRaw: %+v", row)
-	body, err := format.DecodeVyLogBody(row.BodyRaw)
-	require.NoError(t, err)
-	require.NotNil(t, body, "DecodeVyLogBody returned nil body with nil error")
-	// Drain the rest; the file must terminate cleanly.
+
+	var got []string
+
 	for row, err := range r.Rows() {
-		require.NoError(t, err, "Rows error")
-		require.NotNil(t, row, "nil row, nil error")
+		require.NoError(t, err)
+
+		body, err := format.DecodeVyLogBody(row.BodyRaw)
+		require.NoError(t, err)
+
+		keys := make([]string, 0, len(body.Keys))
+		for _, key := range []format.VyKey{
+			format.VyKeyLSMID, format.VyKeyRangeID, format.VyKeyRunID,
+			format.VyKeySpaceID, format.VyKeyDef, format.VyKeySliceID,
+			format.VyKeyDumpLSN, format.VyKeyCreateLSN, format.VyKeyDumpCount,
+		} {
+			if raw, ok := body.Keys[key]; ok {
+				keys = append(keys, fmt.Sprintf("%s=%x", key, raw))
+			}
+		}
+
+		got = append(got, fmt.Sprintf("%s %v", body.Type, keys))
 	}
+
+	assert.Equal(t, []string{
+		"SNAPSHOT []",
+		"PREPARE_LSM [SPACE_ID=cd0201 DEF=9183a56669656c6400a474797065a8756e7369676e6564aa736f72745f6f72646572a3617363]",
+		"INSERT_RANGE [RANGE_ID=01]",
+		"CREATE_LSM [CREATE_LSN=04]",
+		"PREPARE_RUN [RUN_ID=02]",
+		"CREATE_RUN [RUN_ID=02 DUMP_LSN=0c DUMP_COUNT=01]",
+		"INSERT_SLICE [RANGE_ID=01 RUN_ID=02 SLICE_ID=03]",
+		"DUMP_LSM [DUMP_LSN=0c]",
+	}, got)
 }
 
 // TestSynchro_DecodeRealRows decodes the synchronous replication rows a real

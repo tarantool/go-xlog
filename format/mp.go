@@ -219,6 +219,34 @@ func readMPMapLen(b []byte) (int, int, error) {
 	}
 }
 
+// readMPArrayLen reads a msgpack array header and returns (entries,
+// header-len).
+func readMPArrayLen(b []byte) (int, int, error) {
+	if len(b) == 0 {
+		return 0, 0, fmt.Errorf("format: mp array: %w", ErrEmptyInput)
+	}
+
+	c := b[0]
+	switch {
+	case c >= mpcFixedArrayLow && c <= mpcFixedArrayHigh:
+		return int(c & mpcFixedArrayMask), 1, nil
+	case c == mpcArray16:
+		if len(b) < mpHead16 {
+			return 0, 0, fmt.Errorf("format: mp array16: %w", ErrShortInput)
+		}
+
+		return int(binary.BigEndian.Uint16(b[1:mpHead16])), mpHead16, nil
+	case c == mpcArray32:
+		if len(b) < mpHead32 {
+			return 0, 0, fmt.Errorf("format: mp array32: %w", ErrShortInput)
+		}
+
+		return int(binary.BigEndian.Uint32(b[1:mpHead32])), mpHead32, nil
+	default:
+		return 0, 0, fmt.Errorf("format: mp array: %w 0x%02x", ErrUnexpectedTag, c)
+	}
+}
+
 // readMPDouble reads a msgpack float32 / float64 and returns (value, n-read).
 // Tarantool always encodes IPROTO_TIMESTAMP as float64 (mpcDouble).
 func readMPDouble(b []byte) (float64, int, error) {
