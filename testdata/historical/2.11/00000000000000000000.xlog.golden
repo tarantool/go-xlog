@@ -1,6 +1,6 @@
 meta filetype=XLOG format=0.13 version="2.11.5-0-g12a9ceb870" instance=d95af6aa-56fa-420b-85cb-e61b04d2b5db vclock={} prev_vclock={} extras={}
 row lsn=1 replica=0 type=RAFT tsn=1 commit=true flags=0x01 group=1 ts=1.7802647587045052e+09 raft term=2 vote=1 state=0 leader=0 leader_seen=false vclock={}
-row lsn=1 replica=1 type=RAFT_PROMOTE tsn=1 commit=true flags=0x01 group=0 ts=1.7802647587047677e+09 synchro replica=0 lsn=0 term=0
+row lsn=1 replica=1 type=RAFT_PROMOTE tsn=1 commit=true flags=0x01 group=0 ts=1.7802647587047677e+09 synchro replica=0 lsn=0 term=2
 row lsn=2 replica=1 type=INSERT tsn=2 commit=true flags=0x01 group=0 ts=1.780264758704838e+09 dml space=280 tuple=[512,1,"test","memtx",0,{},[]]
 row lsn=3 replica=1 type=INSERT tsn=3 commit=true flags=0x01 group=0 ts=1.7802647587050967e+09 dml space=288 tuple=[512,0,"pk","tree",{"unique":true},[[0,"unsigned"]]]
 row lsn=4 replica=1 type=INSERT tsn=4 commit=true flags=0x01 group=0 ts=1.780264758705144e+09 dml space=512 tuple=[1,"alpha"]

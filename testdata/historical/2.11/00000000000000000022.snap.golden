@@ -392,7 +392,7 @@ row lsn=389 replica=0 type=INSERT tsn=389 commit=true flags=0x01 group=0 ts=1.78
 row lsn=390 replica=0 type=INSERT tsn=390 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 dml space=312 tuple=[1,31,"universe",0,4294967295]
 row lsn=391 replica=0 type=INSERT tsn=391 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 dml space=320 tuple=[1,"d95af6aa-56fa-420b-85cb-e61b04d2b5db"]
 row lsn=392 replica=0 type=RAFT tsn=392 commit=true flags=0x01 group=1 ts=1.7802647571029744e+09 raft term=2 vote=1 state=0 leader=0 leader_seen=false vclock={}
-row lsn=393 replica=0 type=RAFT_PROMOTE tsn=393 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 synchro replica=1 lsn=16 term=0
+row lsn=393 replica=0 type=RAFT_PROMOTE tsn=393 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 synchro replica=1 lsn=16 term=2 vclock={1:16}
 row lsn=394 replica=0 type=INSERT tsn=394 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 dml space=512 tuple=[1,"alpha2"]
 row lsn=395 replica=0 type=INSERT tsn=395 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 dml space=512 tuple=[3,"gamma"]
 row lsn=396 replica=0 type=INSERT tsn=396 commit=true flags=0x01 group=0 ts=1.7802647571029744e+09 dml space=512 tuple=[10,"tx-a"]

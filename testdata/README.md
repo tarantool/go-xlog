@@ -7,12 +7,14 @@ Golden fixtures produced by a real Tarantool 3.x instance via
 Regenerate with:
 
 ```
-# uses `tarantool` from PATH, or set TARANTOOL_BIN to override
+# uses `tarantool` from PATH, or set TARANTOOL_BIN to override;
+# name the sets to regenerate (journal, synchro), all by default
 TARANTOOL_BIN=/path/to/tarantool ./scripts/gen-fixtures.sh
 ```
 
-The fixtures were last generated against
-`tarantool 3.8.0-entrypoint-49-g97a3b38040` (format version `0.13`).
+The `journal` fixtures were last generated against
+`tarantool 3.8.0-entrypoint-49-g97a3b38040`, the `synchro` ones against
+`tarantool 3.8.1-0-ge643f88a5e0c` (format version `0.13`).
 
 ## Live integration tests
 
@@ -67,6 +69,9 @@ and is never invoked by `go test`.
 | `multistmt.xlog` | identical content to `simple.xlog` | 858 B | named distinctly so `format` tests can refer to the multi-row tx without coupling to the simple-tx test |
 | `compressed.xlog` | identical content to `simple.xlog` | 858 B | named distinctly so `format` tests can refer to the zstd-marked tx without coupling |
 | `vylog_sample.vylog` | initial vylog, signature `0` | 388 B | LSM/range/run records from creating the `vtest` vinyl space and dumping it on `box.snapshot()` |
+| `synchro/00000000000000000000.xlog` | `scripts/gen-synchro.lua` | 627 B | PROMOTE (term 2), CONFIRM, ROLLBACK (a quorum of 2 that times out), CONFIRM |
+| `synchro/00000000000000000010.xlog` | `scripts/gen-synchro.lua` | 392 B | DEMOTE (term 3), PROMOTE (term 4), CONFIRM |
+| `synchro/00000000000000000010.snap` | `scripts/gen-synchro.lua` | 5239 B | the limbo checkpoint: a PROMOTE with the confirmed vclock `{1: 8}` |
 
 All three xlog aliases point to the same underlying bytes because all the
 DML lands in a single pre-snapshot xlog. The duplication is intentional —

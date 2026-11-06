@@ -116,14 +116,24 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 			d.Term, d.Vote, d.State, d.LeaderID, d.IsLeaderSeen, renderVClock(d.VClock))
 	case iproto.IPROTO_RAFT_CONFIRM, iproto.IPROTO_RAFT_ROLLBACK, iproto.IPROTO_RAFT_PROMOTE, iproto.IPROTO_RAFT_DEMOTE:
 		// PROMOTE/DEMOTE (31/32) share the synchro body schema with
-		// CONFIRM/ROLLBACK (40/41) — replica_id/lsn/term — not the raft
-		// state body (Tarantool xrow_decode_synchro).
+		// CONFIRM/ROLLBACK (40/41) — replica_id/lsn, plus term/vclock for
+		// PROMOTE/DEMOTE — not the raft state body (Tarantool
+		// xrow_decode_synchro).
 		d, err := format.DecodeSynchroBody(body)
 		if err != nil {
 			return "!decode-error: synchro: " + err.Error()
 		}
 
-		return fmt.Sprintf("synchro replica=%d lsn=%d term=%d", d.ReplicaID, d.LSN, d.Term)
+		out := fmt.Sprintf("synchro replica=%d lsn=%d term=%d", d.ReplicaID, d.LSN, d.Term)
+		if d.ConfirmedVClock != nil {
+			out += " vclock=" + renderVClock(d.ConfirmedVClock)
+		}
+
+		if len(d.Extras) > 0 {
+			out += " extras=" + renderU64Map(d.Extras)
+		}
+
+		return out
 	default:
 		if len(body) == 0 {
 			return "body=(none)"

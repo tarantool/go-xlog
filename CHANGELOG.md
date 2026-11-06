@@ -14,6 +14,12 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Fixed
 
+- format: `DecodeSynchroBody` reads the term of a PROMOTE/DEMOTE row from
+  `IPROTO_TERM`, where Tarantool writes it, instead of key 0, which left the
+  term zero. The confirmed vclock a PROMOTE/DEMOTE carries (`IPROTO_VCLOCK`,
+  written by the limbo checkpoint of a snapshot) is decoded into the new
+  `SynchroBody.ConfirmedVClock`.
+
 ## [v0.1.0] - 2026-07-23
 
 First release of `go-xlog`, a pure-Go byte-level codec and toolkit for the
