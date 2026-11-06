@@ -15,7 +15,8 @@ import (
 // SpaceID pay no decode cost; clone a field before retaining it past the
 // buffer's lifetime.
 //
-// Extras captures any other body key, preserving it across rewrite paths.
+// A body key with no field (IPROTO_TUPLE_META, IPROTO_BEGIN_KEY, ...) is
+// skipped, unless DecodeOptions.OnUnknown of DecodeDMLBodyInto receives it.
 type DMLBody struct {
 	// SpaceID is IPROTO_SPACE_ID, the space the request applies to.
 	SpaceID uint32
@@ -45,9 +46,6 @@ type DMLBody struct {
 	// Arrow is IPROTO_ARROW of an INSERT_ARROW, raw msgpack: the whole
 	// MP_EXT value, ext header included, holding the Arrow IPC stream.
 	Arrow []byte
-	// Extras holds every other body key as raw msgpack, aliasing the decoded
-	// buffer like the fields above.
-	Extras map[uint64][]byte
 }
 
 // ErrEmptyBody is returned by the body decoders when handed a zero-length
@@ -55,11 +53,12 @@ type DMLBody struct {
 var ErrEmptyBody = errors.New("empty body")
 
 // DecodeDMLBody parses a DML body map at b[0:]. It returns an error if b
-// is not a msgpack map header. It is DecodeDMLBodyInto into a new DMLBody.
+// is not a msgpack map header. It is DecodeDMLBodyInto into a new DMLBody,
+// with no options: a key with no field is skipped.
 func DecodeDMLBody(b []byte) (*DMLBody, error) {
 	body := &DMLBody{}
 
-	if err := DecodeDMLBodyInto(b, body); err != nil {
+	if err := DecodeDMLBodyInto(b, body, nil); err != nil {
 		return nil, err
 	}
 
@@ -71,11 +70,10 @@ func DecodeDMLBody(b []byte) (*DMLBody, error) {
 // into one caller-owned DMLBody. It first resets dst to the zero DMLBody, so
 // a reused dst carries no field of a prior row, then sets the fields of the
 // keys b holds. The raw fields of dst (Tuple, Key, Ops, OldTuple, NewTuple,
-// Arrow, the values of Extras) alias b; clone one before retaining it past
-// b's lifetime. A map of a prior row is never reused: a body with a key that
-// has no field allocates a new Extras map. On error dst holds what was
-// decoded before it.
-func DecodeDMLBodyInto(b []byte, dst *DMLBody) error {
+// Arrow) alias b; clone one before retaining it past b's lifetime. A key with
+// no field goes to opts.OnUnknown, or is skipped when opts or its OnUnknown
+// is nil. On error dst holds what was decoded before it.
+func DecodeDMLBodyInto(b []byte, dst *DMLBody, opts *DecodeOptions) error {
 	*dst = DMLBody{}
 
 	if len(b) == 0 {
@@ -141,11 +139,7 @@ func DecodeDMLBodyInto(b []byte, dst *DMLBody) error {
 		case iproto.IPROTO_ARROW:
 			body.Arrow = val
 		default:
-			if body.Extras == nil {
-				body.Extras = map[uint64][]byte{}
-			}
-
-			body.Extras[key] = val
+			opts.unknown(key, val)
 		}
 	}
 

@@ -216,11 +216,14 @@ func isJournal(path string) bool {
 }
 
 // Record is one filtered row handed to the caller's callback. Body is the
-// decoded DML body, or nil for rows without one (e.g. NOP).
+// decoded DML body, or nil for rows without one (e.g. NOP). Unknown holds the
+// body keys DMLBody has no field for, as raw msgpack, nil when there are none:
+// a consumer that shows or re-sends the row needs them too.
 type Record struct {
-	File string
-	Row  format.XRow
-	Body *format.DMLBody
+	File    string
+	Row     format.XRow
+	Body    *format.DMLBody
+	Unknown map[uint64][]byte
 }
 
 // Process opens each file in turn and invokes fn for every row the keep filter
@@ -249,13 +252,19 @@ func processFile(file string, keep filter.Filter, fn func(Record) error) error {
 			continue
 		}
 
-		var body *format.DMLBody
+		var (
+			body    *format.DMLBody
+			unknown map[uint64][]byte
+		)
 		if len(row.BodyRaw) > 0 {
-			if b, derr := format.DecodeDMLBody(row.BodyRaw); derr == nil {
+			b := &format.DMLBody{}
+			if format.DecodeDMLBodyInto(row.BodyRaw, b, format.CollectUnknown(&unknown)) == nil {
 				body = b
+			} else {
+				unknown = nil
 			}
 		}
-		if err := fn(Record{File: file, Row: row, Body: body}); err != nil {
+		if err := fn(Record{File: file, Row: row, Body: body, Unknown: unknown}); err != nil {
 			return err
 		}
 	}

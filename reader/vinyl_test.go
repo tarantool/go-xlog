@@ -140,9 +140,11 @@ func renderMP(t *testing.T, raw []byte) string {
 func renderStmt(t *testing.T, row format.XRow) string {
 	t.Helper()
 
-	body, err := format.DecodeVyStmtBody(row.BodyRaw)
-	require.NoError(t, err)
-	assert.Empty(t, body.Extras, "unrecognised statement keys")
+	var unknown map[uint64][]byte
+
+	body := &format.VyStmtBody{}
+	require.NoError(t, format.DecodeVyStmtBodyInto(row.BodyRaw, body, format.CollectUnknown(&unknown)))
+	assert.Empty(t, unknown, "unrecognised statement keys")
 	assert.Zero(t, row.ReplicaID, "a statement has no replica")
 
 	out := fmt.Sprintf("%s@%d", format.TypeName(row.Type), row.LSN)

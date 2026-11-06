@@ -118,16 +118,15 @@ type VyStmtBody struct {
 	Ops []byte
 	// Flags are the statement flags of IPROTO_TUPLE_META.
 	Flags VyStmtFlags
-	// Extras holds every unrecognised body key as raw msgpack.
-	Extras map[uint64][]byte
 }
 
 // DecodeVyStmtBody parses the body of a statement of a .run file. It is
-// DecodeVyStmtBodyInto into a new VyStmtBody.
+// DecodeVyStmtBodyInto into a new VyStmtBody, with no options: a key with no
+// field is skipped.
 func DecodeVyStmtBody(b []byte) (*VyStmtBody, error) {
 	body := &VyStmtBody{}
 
-	if err := DecodeVyStmtBodyInto(b, body); err != nil {
+	if err := DecodeVyStmtBodyInto(b, body, nil); err != nil {
 		return nil, err
 	}
 
@@ -138,11 +137,11 @@ func DecodeVyStmtBody(b []byte) (*VyStmtBody, error) {
 // dst, the zero-allocation core of DecodeVyStmtBody. It first resets dst to
 // the zero VyStmtBody, so a dst reused across statements carries no field of
 // a prior one, then sets the fields of the keys b holds. The raw fields of
-// dst (Tuple, Key, Ops, the values of Extras) alias b; clone one before
-// retaining it past b's lifetime. A map of a prior statement is never
-// reused: a body with a key that has no field allocates a new Extras map. On
-// error dst holds what was decoded before it.
-func DecodeVyStmtBodyInto(b []byte, dst *VyStmtBody) error {
+// dst (Tuple, Key, Ops) alias b; clone one before retaining it past b's
+// lifetime. A body key with no field goes to opts.OnUnknown, or is skipped
+// when opts or its OnUnknown is nil. On error dst holds what was decoded
+// before it.
+func DecodeVyStmtBodyInto(b []byte, dst *VyStmtBody, opts *DecodeOptions) error {
 	*dst = VyStmtBody{}
 	body := dst
 
@@ -169,11 +168,7 @@ func DecodeVyStmtBodyInto(b []byte, dst *VyStmtBody) error {
 
 			body.Flags = flags
 		default:
-			if body.Extras == nil {
-				body.Extras = map[uint64][]byte{}
-			}
-
-			body.Extras[key] = val
+			opts.unknown(key, val)
 		}
 
 		return nil
@@ -231,17 +226,16 @@ type VyRunInfo struct {
 	Bloom []byte
 	// StmtStat counts the statements of the run by type.
 	StmtStat VyStmtStat
-	// Extras holds every unrecognised key as raw msgpack.
-	Extras map[uint64][]byte
 }
 
 // DecodeVyRunInfoBody parses the body of a VY_INDEX_RUN_INFO row. Like
 // Tarantool's vy_run_info_decode it requires the keys, the LSNs and the page
-// count. It is DecodeVyRunInfoBodyInto into a new VyRunInfo.
+// count. It is DecodeVyRunInfoBodyInto into a new VyRunInfo, with no options:
+// a key with no field is skipped.
 func DecodeVyRunInfoBody(b []byte) (*VyRunInfo, error) {
 	info := &VyRunInfo{}
 
-	if err := DecodeVyRunInfoBodyInto(b, info); err != nil {
+	if err := DecodeVyRunInfoBodyInto(b, info, nil); err != nil {
 		return nil, err
 	}
 
@@ -259,11 +253,10 @@ var vyRunInfoRequired = []vyRequiredKey{
 // dst, the zero-allocation core of DecodeVyRunInfoBody. It first resets dst to
 // the zero VyRunInfo, so a reused dst carries no field of a prior row, then
 // sets the fields of the keys b holds. The raw fields of dst (MinKey, MaxKey,
-// Bloom, the values of Extras) alias b; clone one before retaining it past
-// b's lifetime. A map of a prior row is never reused: a body with a key that
-// has no field allocates a new Extras map. On error dst holds what was
-// decoded before it.
-func DecodeVyRunInfoBodyInto(b []byte, dst *VyRunInfo) error {
+// Bloom) alias b; clone one before retaining it past b's lifetime. A key with
+// no field goes to opts.OnUnknown, or is skipped when opts or its OnUnknown is
+// nil. On error dst holds what was decoded before it.
+func DecodeVyRunInfoBodyInto(b []byte, dst *VyRunInfo, opts *DecodeOptions) error {
 	const name = "DecodeVyRunInfoBody"
 
 	*dst = VyRunInfo{}
@@ -304,11 +297,7 @@ func DecodeVyRunInfoBodyInto(b []byte, dst *VyRunInfo) error {
 
 			info.StmtStat = stat
 		default:
-			if info.Extras == nil {
-				info.Extras = map[uint64][]byte{}
-			}
-
-			info.Extras[key] = val
+			opts.unknown(key, val)
 		}
 
 		return nil
@@ -378,17 +367,16 @@ type VyPageInfo struct {
 	// RowIndexOffset is the offset of the VY_RUN_ROW_INDEX row in the rows of
 	// the page, uncompressed.
 	RowIndexOffset uint32
-	// Extras holds every unrecognised key as raw msgpack.
-	Extras map[uint64][]byte
 }
 
 // DecodeVyPageInfoBody parses the body of a VY_INDEX_PAGE_INFO row. Like
 // Tarantool's vy_page_info_decode it requires every key. It is
-// DecodeVyPageInfoBodyInto into a new VyPageInfo.
+// DecodeVyPageInfoBodyInto into a new VyPageInfo, with no options: a key with
+// no field is skipped.
 func DecodeVyPageInfoBody(b []byte) (*VyPageInfo, error) {
 	page := &VyPageInfo{}
 
-	if err := DecodeVyPageInfoBodyInto(b, page); err != nil {
+	if err := DecodeVyPageInfoBodyInto(b, page, nil); err != nil {
 		return nil, err
 	}
 
@@ -405,12 +393,11 @@ var vyPageInfoRequired = []vyRequiredKey{
 // DecodeVyPageInfoBodyInto parses the body of a VY_INDEX_PAGE_INFO row into
 // dst, the zero-allocation core of DecodeVyPageInfoBody. It first resets dst
 // to the zero VyPageInfo, so a reused dst carries no field of a prior row,
-// then sets the fields of the keys b holds. The raw fields of dst (MinKey,
-// the values of Extras) alias b; clone one before retaining it past b's
-// lifetime. A map of a prior row is never reused: a body with a key that has
-// no field allocates a new Extras map. On error dst holds what was decoded
-// before it.
-func DecodeVyPageInfoBodyInto(b []byte, dst *VyPageInfo) error {
+// then sets the fields of the keys b holds. MinKey aliases b; clone it before
+// retaining it past b's lifetime. A key with no field goes to opts.OnUnknown,
+// or is skipped when opts or its OnUnknown is nil. On error dst holds what
+// was decoded before it.
+func DecodeVyPageInfoBodyInto(b []byte, dst *VyPageInfo, opts *DecodeOptions) error {
 	const name = "DecodeVyPageInfoBody"
 
 	*dst = VyPageInfo{}
@@ -444,11 +431,7 @@ func DecodeVyPageInfoBodyInto(b []byte, dst *VyPageInfo) error {
 				page.RowIndexOffset = uint32(v) //nolint:gosec // G115: a uint32 field of vy_page_info
 			}
 		default:
-			if page.Extras == nil {
-				page.Extras = map[uint64][]byte{}
-			}
-
-			page.Extras[key] = val
+			opts.unknown(key, val)
 		}
 
 		return nil

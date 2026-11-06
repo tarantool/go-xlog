@@ -185,6 +185,12 @@ func apply(conn *tarantool.Connection, rec checkpoint.Record) (bool, error) {
 	if _, err := conn.Do(req).Get(); err != nil {
 		return false, err
 	}
+	// A request carries only the fields above: say so rather than drop the
+	// other body keys of the row in silence.
+	for key := range rec.Unknown {
+		fmt.Fprintf(os.Stderr, "play: %s lsn %d: body key 0x%02x not replayed\n",
+			rec.File, rec.Row.LSN, key)
+	}
 	return true, nil
 }
 

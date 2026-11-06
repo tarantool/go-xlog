@@ -407,9 +407,12 @@ data changes (`DecodeDMLBody`), Raft and synchronous replication rows
 and the rows of vinyl run and index files (`DecodeVyStmtBody`,
 `DecodeVyRowIndexBody`, `DecodeVyRunInfoBody`, `DecodeVyPageInfoBody`); each
 struct-returning decoder has an allocation-free `...Into` variant filling a
-caller-owned struct, like `DecodeXRowInto`. Request types and IPROTO
-header/body keys and flags come from `github.com/tarantool/go-iproto`
-(`iproto.IPROTO_*`). Use it directly if you need to work below the cursor level.
+caller-owned struct, like `DecodeXRowInto`. A body key with no typed field is
+skipped unless `DecodeOptions.OnUnknown` asks for it (`CollectUnknown` gathers
+them into a map); code that re-encodes a body must ask, or lose those keys.
+Request types and IPROTO header/body keys and flags come from
+`github.com/tarantool/go-iproto` (`iproto.IPROTO_*`). Use it directly if you
+need to work below the cursor level.
 
 ### Package `reader`
 

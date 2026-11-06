@@ -87,8 +87,10 @@ func renderRow(ft format.Filetype, r format.XRow) string {
 func renderJournalBody(typ iproto.Type, body []byte) string {
 	switch typ {
 	case iproto.IPROTO_INSERT, iproto.IPROTO_REPLACE, iproto.IPROTO_UPDATE, iproto.IPROTO_DELETE, iproto.IPROTO_UPSERT:
-		d, err := format.DecodeDMLBody(body)
-		if err != nil {
+		var unknown map[uint64][]byte
+
+		d := &format.DMLBody{}
+		if err := format.DecodeDMLBodyInto(body, d, format.CollectUnknown(&unknown)); err != nil {
 			return "!decode-error: dml: " + err.Error()
 		}
 
@@ -109,8 +111,8 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 		out += rawField(" new=", d.NewTuple)
 		out += rawField(" arrow=", d.Arrow)
 
-		if len(d.Extras) > 0 {
-			out += " extras=" + renderU64Map(d.Extras)
+		if len(unknown) > 0 {
+			out += " extras=" + renderU64Map(unknown)
 		}
 
 		return out
@@ -129,8 +131,10 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 		// CONFIRM/ROLLBACK (40/41) — replica_id/lsn, plus term/vclock for
 		// PROMOTE/DEMOTE — not the raft state body (Tarantool
 		// xrow_decode_synchro).
-		d, err := format.DecodeSynchroBody(body)
-		if err != nil {
+		var unknown map[uint64][]byte
+
+		d := &format.SynchroBody{}
+		if err := format.DecodeSynchroBodyInto(body, d, format.CollectUnknown(&unknown)); err != nil {
 			return "!decode-error: synchro: " + err.Error()
 		}
 
@@ -139,8 +143,8 @@ func renderJournalBody(typ iproto.Type, body []byte) string {
 			out += " vclock=" + renderVClock(d.ConfirmedVClock)
 		}
 
-		if len(d.Extras) > 0 {
-			out += " extras=" + renderU64Map(d.Extras)
+		if len(unknown) > 0 {
+			out += " extras=" + renderU64Map(unknown)
 		}
 
 		return out
@@ -166,8 +170,10 @@ func renderStorageBody(ft format.Filetype, typ iproto.Type, body []byte) string 
 
 		return fmt.Sprintf("rowindex offsets=%v", offsets)
 	case ft == format.FiletypeRUN:
-		d, err := format.DecodeVyStmtBody(body)
-		if err != nil {
+		var unknown map[uint64][]byte
+
+		d := &format.VyStmtBody{}
+		if err := format.DecodeVyStmtBodyInto(body, d, format.CollectUnknown(&unknown)); err != nil {
 			return "!decode-error: stmt: " + err.Error()
 		}
 
@@ -176,8 +182,8 @@ func renderStorageBody(ft format.Filetype, typ iproto.Type, body []byte) string 
 		out += rawField(" key=", d.Key)
 		out += rawField(" ops=", d.Ops)
 
-		if len(d.Extras) > 0 {
-			out += " extras=" + renderU64Map(d.Extras)
+		if len(unknown) > 0 {
+			out += " extras=" + renderU64Map(unknown)
 		}
 
 		return out
