@@ -169,7 +169,7 @@ func toDisplay(rec checkpoint.Record) (displayRecord, error) {
 		Type:      format.TypeName(rec.Row.Type),
 		Timestamp: rec.Row.Timestamp,
 	}}
-	body, err := bodyMap(rec.Body)
+	body, err := bodyMap(rec.Body, rec.Unknown)
 	if err != nil {
 		return d, err
 	}
@@ -177,8 +177,9 @@ func toDisplay(rec checkpoint.Record) (displayRecord, error) {
 	return d, nil
 }
 
-// bodyMap decodes the DML body fields into a name-keyed map for display.
-func bodyMap(b *format.DMLBody) (map[string]any, error) {
+// bodyMap decodes the DML body fields into a name-keyed map for display,
+// with each unknown body key under its hex number.
+func bodyMap(b *format.DMLBody, unknown map[uint64][]byte) (map[string]any, error) {
 	if b == nil {
 		return nil, nil
 	}
@@ -208,7 +209,7 @@ func bodyMap(b *format.DMLBody) (map[string]any, error) {
 			m[name] = v
 		}
 	}
-	for key, raw := range b.Extras {
+	for key, raw := range unknown {
 		v, err := mpDecode(raw)
 		if err != nil {
 			return nil, fmt.Errorf("decode body key 0x%02x: %w", key, err)

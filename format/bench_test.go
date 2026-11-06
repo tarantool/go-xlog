@@ -174,7 +174,7 @@ func BenchmarkDecodeDMLBodyInto(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
-				if err := format.DecodeDMLBodyInto(body, &dst); err != nil {
+				if err := format.DecodeDMLBodyInto(body, &dst, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -190,7 +190,7 @@ func BenchmarkDecodeRaftBodyInto(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		if err := format.DecodeRaftBodyInto(body, &dst); err != nil {
+		if err := format.DecodeRaftBodyInto(body, &dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -204,7 +204,7 @@ func BenchmarkDecodeSynchroBodyInto(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		if err := format.DecodeSynchroBodyInto(body, &dst); err != nil {
+		if err := format.DecodeSynchroBodyInto(body, &dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -218,7 +218,7 @@ func BenchmarkDecodeVyLogBodyInto(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		if err := format.DecodeVyLogBodyInto(body, &dst); err != nil {
+		if err := format.DecodeVyLogBodyInto(body, &dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -232,7 +232,7 @@ func BenchmarkDecodeVyStmtBodyInto(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		if err := format.DecodeVyStmtBodyInto(body, &dst); err != nil {
+		if err := format.DecodeVyStmtBodyInto(body, &dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -246,7 +246,7 @@ func BenchmarkDecodeVyPageInfoBodyInto(b *testing.B) {
 	b.ReportAllocs()
 
 	for range b.N {
-		if err := format.DecodeVyPageInfoBodyInto(body, &dst); err != nil {
+		if err := format.DecodeVyPageInfoBodyInto(body, &dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}

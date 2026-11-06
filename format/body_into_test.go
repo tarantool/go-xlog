@@ -48,7 +48,7 @@ func dmlRichBody() []byte {
 	b = append(b, kv(uint64(iproto.IPROTO_OLD_TUPLE), []byte{0x91, 0x03})...)
 	b = append(b, kv(uint64(iproto.IPROTO_NEW_TUPLE), []byte{0x91, 0x04})...)
 	b = append(b, kv(uint64(iproto.IPROTO_ARROW), []byte{0xd4, 0x08, 0xff})...)
-	b = append(b, kv(0x7e, []byte{0x05})...)
+	b = append(b, kv(0x55, []byte{0x01})...)
 
 	return buildMap(10, b)
 }
@@ -68,7 +68,7 @@ func raftBody(withVClock bool) []byte {
 
 	vclock := buildMap(2, append(kv(1, mpUint(100)), kv(2, mpUint(200))...))
 	b = append(b, kv(uint64(iproto.IPROTO_RAFT_VCLOCK), vclock)...)
-	b = append(b, kv(99, mpUint(42))...)
+	b = append(b, kv(0x55, []byte{0x01})...)
 
 	return buildMap(7, b)
 }
@@ -147,7 +147,14 @@ func pageInfoBody(extra ...[]byte) []byte {
 // checkInto pins the contract of a Decode<X>BodyInto: it decodes what the
 // allocating decode does, and decoding sparse into the dst rich was decoded
 // into yields a fresh decode of sparse - no field of rich bleeds through.
-func checkInto[T any](t *testing.T, decode func([]byte) (*T, error), into func([]byte, *T) error, rich, sparse []byte) {
+// rich holds the unknown body key 0x55 with the value 0x01 and sparse none:
+// OnUnknown receives exactly that, and the decode is the same without it.
+func checkInto[T any](
+	t *testing.T,
+	decode func([]byte) (*T, error),
+	into func([]byte, *T, *format.DecodeOptions) error,
+	rich, sparse []byte,
+) {
 	t.Helper()
 
 	for _, b := range [][]byte{rich, sparse} {
@@ -156,17 +163,24 @@ func checkInto[T any](t *testing.T, decode func([]byte) (*T, error), into func([
 
 		var got T
 
-		require.NoError(t, into(b, &got))
+		require.NoError(t, into(b, &got, nil))
 		assert.Equal(t, *want, got, "Into must decode what the allocating decoder does")
 	}
 
-	var dst T
+	var (
+		dst     T
+		unknown map[uint64][]byte
+	)
 
-	require.NoError(t, into(rich, &dst))
+	require.NoError(t, into(rich, &dst, format.CollectUnknown(&unknown)))
+	assert.Equal(t, map[uint64][]byte{0x55: {0x01}}, unknown, "OnUnknown gets the unknown key of rich")
 
 	richCopy := dst
 
-	require.NoError(t, into(sparse, &dst))
+	unknown = nil
+
+	require.NoError(t, into(sparse, &dst, format.CollectUnknown(&unknown)))
+	assert.Nil(t, unknown, "sparse has no unknown key")
 
 	want, err := decode(sparse)
 	require.NoError(t, err)
@@ -178,7 +192,6 @@ func TestDecodeDMLBodyInto_NoFieldBleed(t *testing.T) {
 	t.Parallel()
 
 	checkInto(t, format.DecodeDMLBody, format.DecodeDMLBodyInto, dmlRichBody(), dmlInsertBody())
-	checkInto(t, format.DecodeDMLBody, format.DecodeDMLBodyInto, dmlIndexBody(), dmlInsertBody())
 }
 
 func TestDecodeRaftBodyInto_NoFieldBleed(t *testing.T) {
@@ -197,6 +210,8 @@ func TestDecodeVyLogBodyInto_NoFieldBleed(t *testing.T) {
 	t.Parallel()
 
 	rich := vyLogBody(format.VyLogCreateRun, kv(uint64(format.VyKeyLSMID), mpUint(3)), kv(uint64(format.VyKeyRunID), mpUint(7)))
+	rich[0] = 0x82 // fixmap(2): the record and an unknown body key.
+	rich = append(rich, kv(0x55, []byte{0x01})...)
 	sparse := vyLogBody(format.VyLogCreateLSM)
 
 	checkInto(t, format.DecodeVyLogBody, format.DecodeVyLogBodyInto, rich, sparse)
@@ -219,7 +234,11 @@ func TestDecodeVyRunInfoBodyInto_NoFieldBleed(t *testing.T) {
 func TestDecodeVyPageInfoBodyInto_NoFieldBleed(t *testing.T) {
 	t.Parallel()
 
-	checkInto(t, format.DecodeVyPageInfoBody, format.DecodeVyPageInfoBodyInto, pageInfoBody(kv(0x55, []byte{0x01})), pageInfoBody())
+	// Every key of a page info is mandatory: the sparse one differs in its
+	// values, and repeats offset - the later one wins.
+	sparse := pageInfoBody(kv(1, mpUint(7)))
+
+	checkInto(t, format.DecodeVyPageInfoBody, format.DecodeVyPageInfoBodyInto, pageInfoBody(kv(0x55, []byte{0x01})), sparse)
 }
 
 // TestDecodeBodyInto_ErrorResets - an error still resets dst first, so a
@@ -229,12 +248,12 @@ func TestDecodeBodyInto_ErrorResets(t *testing.T) {
 
 	dst := format.DMLBody{SpaceID: 9, IndexID: 1}
 
-	require.ErrorIs(t, format.DecodeDMLBodyInto(nil, &dst), format.ErrEmptyBody)
+	require.ErrorIs(t, format.DecodeDMLBodyInto(nil, &dst, nil), format.ErrEmptyBody)
 	assert.Equal(t, format.DMLBody{}, dst)
 
 	vy := format.VyPageInfo{Offset: 1}
 
-	require.ErrorIs(t, format.DecodeVyPageInfoBodyInto(buildMap(1, kv(1, mpUint(88))), &vy), format.ErrVyMissingKey)
+	require.ErrorIs(t, format.DecodeVyPageInfoBodyInto(buildMap(1, kv(1, mpUint(88))), &vy, nil), format.ErrVyMissingKey)
 	assert.Equal(t, format.VyPageInfo{Offset: 88}, vy, "dst holds what was decoded before the error")
 }
 
@@ -253,20 +272,32 @@ func TestDecodeBodyInto_ZeroAlloc(t *testing.T) { //nolint:paralleltest // Alloc
 		stmt    format.VyStmtBody
 		runInf  format.VyRunInfo
 		pageInf format.VyPageInfo
+		seen    int
 	)
+
+	// An OnUnknown that stores nothing keeps the decode allocation-free.
+	count := &format.DecodeOptions{OnUnknown: func(uint64, []byte) { seen++ }}
 
 	cases := []struct {
 		name string
 		body []byte
 		into func(b []byte) error
 	}{
-		{"DML clean INSERT", dmlInsertBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml) }},
-		{"DML with INDEX_ID", dmlIndexBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml) }},
-		{"RAFT without vclock", raftBody(false), func(b []byte) error { return format.DecodeRaftBodyInto(b, &raft) }},
-		{"CONFIRM", synchroConfirmBody(), func(b []byte) error { return format.DecodeSynchroBodyInto(b, &synchro) }},
-		{"run statement", vyStmtDeleteBody(), func(b []byte) error { return format.DecodeVyStmtBodyInto(b, &stmt) }},
-		{"run info", runInfo(), func(b []byte) error { return format.DecodeVyRunInfoBodyInto(b, &runInf) }},
-		{"page info", pageInfoBody(), func(b []byte) error { return format.DecodeVyPageInfoBodyInto(b, &pageInf) }},
+		{"DML clean INSERT", dmlInsertBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml, nil) }},
+		{"DML with INDEX_ID", dmlIndexBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml, nil) }},
+		{"RAFT without vclock", raftBody(false), func(b []byte) error { return format.DecodeRaftBodyInto(b, &raft, nil) }},
+		{"CONFIRM", synchroConfirmBody(), func(b []byte) error { return format.DecodeSynchroBodyInto(b, &synchro, nil) }},
+		{"run statement", vyStmtDeleteBody(), func(b []byte) error { return format.DecodeVyStmtBodyInto(b, &stmt, nil) }},
+		{"run info", runInfo(), func(b []byte) error { return format.DecodeVyRunInfoBodyInto(b, &runInf, nil) }},
+		{"page info", pageInfoBody(), func(b []byte) error { return format.DecodeVyPageInfoBodyInto(b, &pageInf, nil) }},
+		// Unknown keys are skipped with no options, or handed to OnUnknown,
+		// with no allocation either way.
+		{"DML unknown key, nil opts", dmlRichBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml, nil) }},
+		{"DML unknown key, OnUnknown", dmlRichBody(), func(b []byte) error { return format.DecodeDMLBodyInto(b, &dml, count) }},
+		{"synchro unknown key", buildMap(1, kv(0x55, []byte{0x01})), func(b []byte) error { return format.DecodeSynchroBodyInto(b, &synchro, count) }},
+		{"run statement unknown key", vyStmtRichBody(), func(b []byte) error { return format.DecodeVyStmtBodyInto(b, &stmt, count) }},
+		{"run info unknown key", runInfo(kv(0x55, []byte{0x01})), func(b []byte) error { return format.DecodeVyRunInfoBodyInto(b, &runInf, count) }},
+		{"page info unknown key", pageInfoBody(kv(0x55, []byte{0x01})), func(b []byte) error { return format.DecodeVyPageInfoBodyInto(b, &pageInf, count) }},
 	}
 
 	for _, c := range cases {
@@ -280,4 +311,45 @@ func TestDecodeBodyInto_ZeroAlloc(t *testing.T) { //nolint:paralleltest // Alloc
 		})
 		assert.Zerof(t, allocs, "%s: allocs", c.name)
 	}
+}
+
+// TestDecodeOptions_OnUnknown - OnUnknown receives every key with no field,
+// in body order, with its raw value aliasing the input; a duplicate key is
+// handed over each time, and CollectUnknown keeps the last.
+func TestDecodeOptions_OnUnknown(t *testing.T) {
+	t.Parallel()
+
+	b := make([]byte, 0, 32)
+	b = append(b, kv(0x60, mpUint(1))...)
+	b = append(b, kv(uint64(iproto.IPROTO_SPACE_ID), mpUint(512))...)
+	b = append(b, kv(0x61, []byte{0x91, 0x02})...)
+	b = append(b, kv(0x60, mpUint(3))...)
+	raw := buildMap(4, b)
+
+	type seen struct {
+		key uint64
+		raw []byte
+	}
+
+	var got []seen
+
+	var body format.DMLBody
+
+	opts := &format.DecodeOptions{OnUnknown: func(key uint64, v []byte) { got = append(got, seen{key, v}) }}
+	require.NoError(t, format.DecodeDMLBodyInto(raw, &body, opts))
+	assert.Equal(t, uint32(512), body.SpaceID)
+	assert.Equal(t, []seen{{0x60, []byte{0x01}}, {0x61, []byte{0x91, 0x02}}, {0x60, []byte{0x03}}}, got)
+
+	// raw aliases the input: it is a window of the body, not a copy.
+	require.Len(t, got, 3)
+	assert.Same(t, &raw[len(raw)-1], &got[2].raw[0], "raw must alias the body")
+
+	var unknown map[uint64][]byte
+
+	require.NoError(t, format.DecodeDMLBodyInto(raw, &body, format.CollectUnknown(&unknown)))
+	assert.Equal(t, map[uint64][]byte{0x60: {0x03}, 0x61: {0x91, 0x02}}, unknown)
+
+	// An empty DecodeOptions skips unknown keys, as nil does.
+	require.NoError(t, format.DecodeDMLBodyInto(raw, &body, &format.DecodeOptions{}))
+	assert.Equal(t, format.DMLBody{SpaceID: 512}, body)
 }

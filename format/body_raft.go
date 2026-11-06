@@ -8,15 +8,24 @@ import (
 )
 
 // RaftBody is the typed body of a IPROTO_RAFT row. Keys come from
-// src/box/iproto_constants.h:465-471.
+// src/box/iproto_constants.h:465-471. A body key with no field is skipped,
+// unless DecodeOptions.OnUnknown of DecodeRaftBodyInto receives it.
 type RaftBody struct {
-	Term         uint64
-	Vote         uint64
-	State        uint32
-	VClock       VClock
-	LeaderID     uint32
+	// Term is IPROTO_RAFT_TERM, the Raft term of the instance.
+	Term uint64
+	// Vote is IPROTO_RAFT_VOTE, the instance voted for in Term, 0 for none.
+	Vote uint64
+	// State is IPROTO_RAFT_STATE, the Raft state (follower, candidate,
+	// leader).
+	State uint32
+	// VClock is IPROTO_RAFT_VCLOCK, the vclock of the instance, nil when the
+	// body carries none.
+	VClock VClock
+	// LeaderID is IPROTO_RAFT_LEADER_ID, the leader the instance knows of.
+	LeaderID uint32
+	// IsLeaderSeen is IPROTO_RAFT_IS_LEADER_SEEN, whether the instance sees
+	// the leader directly.
 	IsLeaderSeen bool
-	Extras       map[uint64][]byte
 }
 
 // Sentinel errors for malformed RAFT bodies.
@@ -26,11 +35,11 @@ var (
 )
 
 // DecodeRaftBody parses a RAFT body map. It is DecodeRaftBodyInto into a new
-// RaftBody.
+// RaftBody, with no options: a key with no field is skipped.
 func DecodeRaftBody(b []byte) (*RaftBody, error) {
 	body := &RaftBody{}
 
-	if err := DecodeRaftBodyInto(b, body); err != nil {
+	if err := DecodeRaftBodyInto(b, body, nil); err != nil {
 		return nil, err
 	}
 
@@ -40,12 +49,13 @@ func DecodeRaftBody(b []byte) (*RaftBody, error) {
 // DecodeRaftBodyInto parses a RAFT body map into dst, the core of
 // DecodeRaftBody. It first resets dst to the zero RaftBody, so a dst reused
 // across rows carries no field of a prior row, then sets the fields of the
-// keys b holds. The values of Extras alias b. A map of a prior row is never
+// keys b holds. A key with no field goes to opts.OnUnknown, or is skipped
+// when opts or its OnUnknown is nil. The VClock map of a prior row is never
 // reused: a body without a vclock decodes with no allocation, but a vclock
-// allocates a new VClock map, and a key that has no field a new Extras map. VClockArray is the allocation-free alternative
-// to VClock; the body decoders do not fill one. On error dst holds what was
+// allocates a new map. VClockArray is the allocation-free alternative to
+// VClock; the body decoders do not fill one. On error dst holds what was
 // decoded before it.
-func DecodeRaftBodyInto(b []byte, dst *RaftBody) error {
+func DecodeRaftBodyInto(b []byte, dst *RaftBody, opts *DecodeOptions) error {
 	*dst = RaftBody{}
 
 	if len(b) == 0 {
@@ -128,11 +138,7 @@ func DecodeRaftBodyInto(b []byte, dst *RaftBody) error {
 				return fmt.Errorf("format: DecodeRaftBody: %w 0x%02x", ErrIsLeaderSeenTag, val[0])
 			}
 		default:
-			if body.Extras == nil {
-				body.Extras = map[uint64][]byte{}
-			}
-
-			body.Extras[key] = val
+			opts.unknown(key, val)
 		}
 	}
 

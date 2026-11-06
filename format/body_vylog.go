@@ -88,11 +88,11 @@ type VyLogBody struct {
 
 // DecodeVyLogBody parses a VYLOG row body. Body keys other than IPROTO_TUPLE
 // are ignored, as Tarantool's vy_log_record_decode does. It is
-// DecodeVyLogBodyInto into a new VyLogBody.
+// DecodeVyLogBodyInto into a new VyLogBody, with no options.
 func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
 	body := &VyLogBody{}
 
-	if err := DecodeVyLogBodyInto(b, body); err != nil {
+	if err := DecodeVyLogBodyInto(b, body, nil); err != nil {
 		return nil, err
 	}
 
@@ -102,9 +102,11 @@ func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
 // DecodeVyLogBodyInto parses a VYLOG row body into dst, the core of
 // DecodeVyLogBody. It first resets dst to the zero VyLogBody, so a dst reused
 // across rows carries no field of a prior row. The values of Keys alias b.
-// The Keys map of a prior row is never reused: every record allocates a new
-// one. On error dst holds what was decoded before it.
-func DecodeVyLogBodyInto(b []byte, dst *VyLogBody) error {
+// A body key other than IPROTO_TUPLE goes to opts.OnUnknown, or is skipped
+// when opts or its OnUnknown is nil. The Keys map of a prior row is never
+// reused: every record allocates a new one. On error dst holds what was
+// decoded before it.
+func DecodeVyLogBodyInto(b []byte, dst *VyLogBody, opts *DecodeOptions) error {
 	*dst = VyLogBody{}
 
 	if len(b) == 0 {
@@ -133,6 +135,8 @@ func DecodeVyLogBodyInto(b []byte, dst *VyLogBody) error {
 
 		if iproto.Key(key) == iproto.IPROTO_TUPLE { //nolint:gosec // G115: msgpack body key is a small protocol number
 			record = b[off : off+valLen]
+		} else {
+			opts.unknown(key, b[off:off+valLen])
 		}
 
 		off += valLen

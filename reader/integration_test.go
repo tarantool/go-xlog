@@ -154,9 +154,12 @@ func TestSynchro_DecodeRealRows(t *testing.T) {
 					continue
 				}
 
-				body, err := format.DecodeSynchroBody(row.BodyRaw)
-				require.NoError(t, err)
-				assert.Empty(t, body.Extras, "unrecognised synchro keys")
+				var unknown map[uint64][]byte
+
+				body := &format.SynchroBody{}
+				require.NoError(t, format.DecodeSynchroBodyInto(row.BodyRaw, body, format.CollectUnknown(&unknown)))
+				assert.Empty(t, unknown, "unrecognised synchro keys")
+
 				got = append(got, fmt.Sprintf("%s lsn=%d owner=%d lsn=%d term=%d vclock=%v",
 					row.Type, row.LSN, body.ReplicaID, body.LSN, body.Term, map[uint32]int64(body.ConfirmedVClock)))
 			}

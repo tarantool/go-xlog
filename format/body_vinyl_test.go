@@ -23,16 +23,20 @@ func TestDecodeVyStmtBody_AllKeys(t *testing.T) {
 	b = append(b, kv(uint64(iproto.IPROTO_TUPLE_META), buildMap(2, append(kv(1, mpUint(3)), kv(7, mpUint(7))...)))...)
 	b = append(b, kv(0x55, []byte{0x01})...)
 
-	body, err := format.DecodeVyStmtBody(buildMap(6, b))
-	require.NoError(t, err)
-	assert.Equal(t, &format.VyStmtBody{
+	var (
+		body    format.VyStmtBody
+		unknown map[uint64][]byte
+	)
+
+	require.NoError(t, format.DecodeVyStmtBodyInto(buildMap(6, b), &body, format.CollectUnknown(&unknown)))
+	assert.Equal(t, format.VyStmtBody{
 		SpaceID: 512,
 		Tuple:   []byte{0x91, 0x01},
 		Key:     []byte{0x91, 0x02},
 		Ops:     []byte{0x91, 0x90},
 		Flags:   format.VyStmtDeferredDelete | format.VyStmtSkipRead,
-		Extras:  map[uint64][]byte{0x55: {0x01}},
 	}, body)
+	assert.Equal(t, map[uint64][]byte{0x55: {0x01}}, unknown, "unknown body keys")
 }
 
 func TestDecodeVyStmtBody_Errors(t *testing.T) {
@@ -89,13 +93,17 @@ func TestDecodeVyRunInfoBody_AllKeys(t *testing.T) {
 	stat = append(stat, kv(uint64(iproto.IPROTO_UPSERT), mpUint(4))...)
 	stat = append(stat, kv(uint64(iproto.IPROTO_UPDATE), mpUint(5))...) // ignored
 
-	info, err := format.DecodeVyRunInfoBody(runInfo(
+	var (
+		info    format.VyRunInfo
+		unknown map[uint64][]byte
+	)
+
+	require.NoError(t, format.DecodeVyRunInfoBodyInto(runInfo(
 		kv(9, []byte{0x91, 0x01}),
 		kv(8, buildMap(5, stat)),
 		kv(0x55, []byte{0x01}),
-	))
-	require.NoError(t, err)
-	assert.Equal(t, &format.VyRunInfo{
+	), &info, format.CollectUnknown(&unknown)))
+	assert.Equal(t, format.VyRunInfo{
 		MinKey:       []byte{0x91, 0x01},
 		MaxKey:       []byte{0x91, 0x09},
 		MinLSN:       4,
@@ -104,8 +112,8 @@ func TestDecodeVyRunInfoBody_AllKeys(t *testing.T) {
 		BloomVersion: 3,
 		Bloom:        []byte{0x91, 0x01},
 		StmtStat:     format.VyStmtStat{Inserts: 1, Replaces: 2, Deletes: 3, Upserts: 4},
-		Extras:       map[uint64][]byte{0x55: {0x01}},
 	}, info)
+	assert.Equal(t, map[uint64][]byte{0x55: {0x01}}, unknown, "unknown body keys")
 }
 
 func TestDecodeVyRunInfoBody_LegacyBloom(t *testing.T) {
@@ -155,17 +163,21 @@ func TestDecodeVyPageInfoBody_AllKeys(t *testing.T) {
 	b = append(b, kv(6, mpUint(45))...)
 	b = append(b, kv(0x55, []byte{0x01})...)
 
-	page, err := format.DecodeVyPageInfoBody(buildMap(7, b))
-	require.NoError(t, err)
-	assert.Equal(t, &format.VyPageInfo{
+	var (
+		page    format.VyPageInfo
+		unknown map[uint64][]byte
+	)
+
+	require.NoError(t, format.DecodeVyPageInfoBodyInto(buildMap(7, b), &page, format.CollectUnknown(&unknown)))
+	assert.Equal(t, format.VyPageInfo{
 		Offset:         88,
 		Size:           87,
 		UnpackedSize:   68,
 		RowCount:       4,
 		MinKey:         []byte{0x91, 0x01},
 		RowIndexOffset: 45,
-		Extras:         map[uint64][]byte{0x55: {0x01}},
 	}, page)
+	assert.Equal(t, map[uint64][]byte{0x55: {0x01}}, unknown, "unknown body keys")
 }
 
 func TestDecodeVyPageInfoBody_Errors(t *testing.T) {

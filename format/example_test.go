@@ -146,3 +146,32 @@ func ExampleDecodeVyStmtBody() {
 	fmt.Printf("key=%x deferred_delete=%t\n", stmt.Key, stmt.Flags&format.VyStmtDeferredDelete != 0)
 	// Output: key=9102 deferred_delete=true
 }
+
+// ExampleDecodeDMLBodyInto decodes the bodies of a stream of rows into one
+// DMLBody, with no allocation per row. A body key DMLBody has no field for is
+// skipped unless the options ask for it: here CollectUnknown gathers them,
+// as a path that writes the body again must.
+func ExampleDecodeDMLBodyInto() {
+	bodies := [][]byte{
+		// {IPROTO_SPACE_ID: 512, IPROTO_INDEX_BASE: 1, IPROTO_KEY: [1]}
+		{0x83, 0x10, 0xcd, 0x02, 0x00, 0x15, 0x01, 0x20, 0x91, 0x01},
+		// {IPROTO_SPACE_ID: 513, 0x7e: 5}
+		{0x82, 0x10, 0xcd, 0x02, 0x01, 0x7e, 0x05},
+	}
+
+	var body format.DMLBody
+
+	for _, raw := range bodies {
+		var unknown map[uint64][]byte
+
+		if err := format.DecodeDMLBodyInto(raw, &body, format.CollectUnknown(&unknown)); err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("space=%d index_base=%d key=%x unknown=%x\n", body.SpaceID, body.IndexBase, body.Key, unknown)
+	}
+
+	// Output:
+	// space=512 index_base=1 key=9101 unknown=map[]
+	// space=513 index_base=0 key= unknown=map[7e:05]
+}

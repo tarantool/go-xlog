@@ -16,7 +16,8 @@ import (
 //     it is set, IPROTO_VCLOCK. The PROMOTE that checkpoints the limbo in a
 //     snapshot carries the vclock.
 //
-// Any other key goes into Extras.
+// Any other key is skipped, unless DecodeOptions.OnUnknown of
+// DecodeSynchroBodyInto receives it.
 type SynchroBody struct {
 	// ReplicaID is the owner of the synchronous queue (queue_owner_id): the
 	// instance whose transactions the row confirms or rolls back, and for a
@@ -33,16 +34,15 @@ type SynchroBody struct {
 	// ConfirmedVClock is the confirmed LSN of every previous queue owner
 	// (IPROTO_VCLOCK) of a PROMOTE/DEMOTE, nil when the row carries none.
 	ConfirmedVClock VClock
-	// Extras holds every unrecognised key as raw msgpack.
-	Extras map[uint64][]byte
 }
 
 // DecodeSynchroBody parses a synchro body map at b[0:]. It is
-// DecodeSynchroBodyInto into a new SynchroBody.
+// DecodeSynchroBodyInto into a new SynchroBody, with no options: a key with
+// no field is skipped.
 func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
 	body := &SynchroBody{}
 
-	if err := DecodeSynchroBodyInto(b, body); err != nil {
+	if err := DecodeSynchroBodyInto(b, body, nil); err != nil {
 		return nil, err
 	}
 
@@ -52,13 +52,13 @@ func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
 // DecodeSynchroBodyInto parses a synchro body map at b[0:] into dst, the core
 // of DecodeSynchroBody. It first resets dst to the zero SynchroBody, so a dst
 // reused across rows carries no field of a prior row, then sets the fields of
-// the keys b holds. The values of Extras alias b. A map of a prior row is
-// never reused: a CONFIRM or ROLLBACK decodes with no allocation, but a
-// PROMOTE or DEMOTE with a vclock allocates a new ConfirmedVClock map, and a
-// key that has no field a new Extras map. VClockArray is the allocation-free
-// alternative to VClock; the body decoders do not fill one. On error dst
-// holds what was decoded before it.
-func DecodeSynchroBodyInto(b []byte, dst *SynchroBody) error {
+// the keys b holds. A key with no field goes to opts.OnUnknown, or is skipped
+// when opts or its OnUnknown is nil. The ConfirmedVClock map of a prior row
+// is never reused: a CONFIRM or ROLLBACK decodes with no allocation, but a
+// PROMOTE or DEMOTE with a vclock allocates a new map. VClockArray is the
+// allocation-free alternative to VClock; the body decoders do not fill one.
+// On error dst holds what was decoded before it.
+func DecodeSynchroBodyInto(b []byte, dst *SynchroBody, opts *DecodeOptions) error {
 	*dst = SynchroBody{}
 
 	if len(b) == 0 {
@@ -119,11 +119,7 @@ func DecodeSynchroBodyInto(b []byte, dst *SynchroBody) error {
 
 			body.ConfirmedVClock = vc
 		default:
-			if body.Extras == nil {
-				body.Extras = map[uint64][]byte{}
-			}
-
-			body.Extras[key] = val
+			opts.unknown(key, val)
 		}
 	}
 

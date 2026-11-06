@@ -91,12 +91,14 @@ func TestDecodeRaftBody_AllKeys(t *testing.T) {
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_VCLOCK), vclock)...)
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_LEADER_ID), mpUint(7))...)
 	body = append(body, kv(uint64(iproto.IPROTO_RAFT_IS_LEADER_SEEN), []byte{0xc3})...) // true
-	body = append(body, kv(99, mpUint(42))...)                                          // unknown -> Extras
+	body = append(body, kv(99, mpUint(42))...)                                          // unknown -> OnUnknown
 
 	raw := buildMap(7, body)
 
-	rb, err := format.DecodeRaftBody(raw)
-	require.NoError(t, err)
+	var unknown map[uint64][]byte
+
+	rb := &format.RaftBody{}
+	require.NoError(t, format.DecodeRaftBodyInto(raw, rb, format.CollectUnknown(&unknown)))
 	assert.Equal(t, uint64(5), rb.Term)
 	assert.Equal(t, uint64(3), rb.Vote)
 	assert.Equal(t, uint32(2), rb.State)
@@ -104,7 +106,7 @@ func TestDecodeRaftBody_AllKeys(t *testing.T) {
 	assert.True(t, rb.IsLeaderSeen)
 	assert.Equal(t, int64(100), rb.VClock[1])
 	assert.Equal(t, int64(200), rb.VClock[2])
-	require.Contains(t, rb.Extras, uint64(99))
+	assert.Equal(t, map[uint64][]byte{99: {42}}, unknown, "unknown body keys")
 }
 
 func TestDecodeRaftBody_IsLeaderSeenFalse(t *testing.T) {
@@ -230,8 +232,10 @@ func TestDecodeDMLBody_AllKeys(t *testing.T) {
 	b = append(b, kv(0x7e, extraV)...)
 	raw := buildMap(10, b)
 
-	body, err := format.DecodeDMLBody(raw)
-	require.NoError(t, err)
+	var unknown map[uint64][]byte
+
+	body := &format.DMLBody{}
+	require.NoError(t, format.DecodeDMLBodyInto(raw, body, format.CollectUnknown(&unknown)))
 	assert.Equal(t, uint32(512), body.SpaceID)
 	assert.Equal(t, uint32(3), body.IndexID)
 	assert.Equal(t, uint32(1), body.IndexBase)
@@ -241,8 +245,8 @@ func TestDecodeDMLBody_AllKeys(t *testing.T) {
 	assert.Equal(t, oldT, body.OldTuple)
 	assert.Equal(t, newT, body.NewTuple)
 	assert.Equal(t, arrow, body.Arrow)
-	// The typed keys do not go into Extras: only the unknown one does.
-	assert.Equal(t, map[uint64][]byte{0x7e: extraV}, body.Extras)
+	// The typed keys do not reach OnUnknown: only the unknown one does.
+	assert.Equal(t, map[uint64][]byte{0x7e: extraV}, unknown)
 }
 
 func TestDecodeDMLBody_Errors(t *testing.T) {
@@ -312,13 +316,15 @@ func TestDecodeSynchroBody_AllKeys(t *testing.T) {
 	b = append(b, kv(0x55, []byte{0x01})...) // extra
 	raw := buildMap(5, b)
 
-	body, err := format.DecodeSynchroBody(raw)
-	require.NoError(t, err)
+	var unknown map[uint64][]byte
+
+	body := &format.SynchroBody{}
+	require.NoError(t, format.DecodeSynchroBodyInto(raw, body, format.CollectUnknown(&unknown)))
 	assert.Equal(t, uint32(3), body.ReplicaID)
 	assert.Equal(t, int64(99), body.LSN)
 	assert.Equal(t, uint64(7), body.Term)
 	assert.Equal(t, format.VClock{1: 98}, body.ConfirmedVClock)
-	require.Contains(t, body.Extras, uint64(0x55))
+	assert.Equal(t, map[uint64][]byte{0x55: {0x01}}, unknown, "unknown body keys")
 }
 
 // TestDecodeSynchroBody_RaftTermKeyIsNotTerm pins that key 0 - the term of a
@@ -328,10 +334,12 @@ func TestDecodeSynchroBody_RaftTermKeyIsNotTerm(t *testing.T) {
 
 	raw := buildMap(1, kv(uint64(iproto.IPROTO_RAFT_TERM), mpUint(7)))
 
-	body, err := format.DecodeSynchroBody(raw)
-	require.NoError(t, err)
+	var unknown map[uint64][]byte
+
+	body := &format.SynchroBody{}
+	require.NoError(t, format.DecodeSynchroBodyInto(raw, body, format.CollectUnknown(&unknown)))
 	assert.Zero(t, body.Term)
-	assert.Contains(t, body.Extras, uint64(iproto.IPROTO_RAFT_TERM))
+	assert.Contains(t, unknown, uint64(iproto.IPROTO_RAFT_TERM))
 }
 
 func TestDecodeSynchroBody_Errors(t *testing.T) {
