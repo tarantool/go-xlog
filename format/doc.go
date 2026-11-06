@@ -1,7 +1,8 @@
 // Package format implements pure byte-level encoding and decoding of every
 // on-disk artefact in Tarantool's journal envelope: meta header, fixheader,
 // xrow records, tx blocks, the EOF marker, and per-body schemas
-// (DML / RAFT / SYNCHRO / VYLOG / vinyl RUN and INDEX). It is the foundation for the `reader`,
+// (DML / RAFT / SYNCHRO / VYLOG / vinyl RUN and INDEX) and the operations
+// of UPDATE and UPSERT. It is the foundation for the `reader`,
 // `writer`, `dir`, `rotate`, and utility packages.
 //
 // Design references in the Tarantool 3.x tree:
@@ -16,6 +17,7 @@
 //   - vy_log keys: src/box/vy_log.c:71-89
 //   - vinyl runs:  src/box/vy_run.c, src/box/vy_stmt.c
 //   - vclock:      src/lib/vclock/vclock.h:54-80, src/lib/vclock/vclock.c:55-72
+//   - update ops:  src/box/xrow_update_field.c (xrow_update_op_decode)
 //
 // No I/O. No global mutable state (sync.Pool instances are construction caches,
 // not state).

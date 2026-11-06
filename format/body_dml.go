@@ -15,9 +15,9 @@ import (
 // Extras captures any unknown body key, preserving it across rewrite paths.
 type DMLBody struct {
 	SpaceID  uint32
-	Tuple    []byte // IPROTO_TUPLE — INSERT/REPLACE/UPSERT.
+	Tuple    []byte // IPROTO_TUPLE — INSERT/REPLACE/UPSERT tuple; UPDATE operations (see DecodeOps).
 	Key      []byte // IPROTO_KEY — UPDATE/DELETE.
-	Ops      []byte // IPROTO_OPS — UPDATE/UPSERT.
+	Ops      []byte // IPROTO_OPS — UPSERT operations (see DecodeOps).
 	OldTuple []byte // IPROTO_OLD_TUPLE — replica-applied, audit.
 	NewTuple []byte // IPROTO_NEW_TUPLE — replica-applied, audit.
 	Extras   map[uint64][]byte
