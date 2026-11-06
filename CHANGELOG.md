@@ -10,6 +10,26 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [v0.2.0] - 2026-11-07
+
+Widens the row layer so it serves the replication wire as well as the on-disk
+journal, and takes the body decoders to zero allocations: a wire row with every
+header key and an UPDATE on a secondary index decode in turn into reused
+destinations without a single malloc, and the decoded row encodes back to its
+bytes the same way. `AllocsPerRun` assertions pin `== 0` for every decoder on
+that path. Adds the decoders of the vinyl log records and of the rows of vinyl
+`.run` and `.index` files. Two changes break callers — `Extras` is removed
+from the body structs, which stops compiling at every reader of it, and
+`IPROTO_INDEX_ID`, `IPROTO_INDEX_BASE` and `IPROTO_ARROW` become typed fields,
+which breaks a lookup of them in the callback's map silently — so both are
+called out under Changed.
+
+### Added
+
 - format: `XRow.Sync` and `XRow.SchemaVersion`, the wire-only header keys
   `IPROTO_SYNC` and `IPROTO_SCHEMA_VERSION`. `DecodeXRowInto` decodes them and
   `EncodeXRow` emits them iff non-zero, `IPROTO_SYNC` where Tarantool's
