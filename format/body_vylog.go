@@ -87,15 +87,33 @@ type VyLogBody struct {
 }
 
 // DecodeVyLogBody parses a VYLOG row body. Body keys other than IPROTO_TUPLE
-// are ignored, as Tarantool's vy_log_record_decode does.
+// are ignored, as Tarantool's vy_log_record_decode does. It is
+// DecodeVyLogBodyInto into a new VyLogBody.
 func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
+	body := &VyLogBody{}
+
+	if err := DecodeVyLogBodyInto(b, body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// DecodeVyLogBodyInto parses a VYLOG row body into dst, the core of
+// DecodeVyLogBody. It first resets dst to the zero VyLogBody, so a dst reused
+// across rows carries no field of a prior row. The values of Keys alias b.
+// The Keys map of a prior row is never reused: every record allocates a new
+// one. On error dst holds what was decoded before it.
+func DecodeVyLogBodyInto(b []byte, dst *VyLogBody) error {
+	*dst = VyLogBody{}
+
 	if len(b) == 0 {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: %w", ErrEmptyBody)
+		return fmt.Errorf("format: DecodeVyLogBody: %w", ErrEmptyBody)
 	}
 
 	entries, off, err := readMPMapLen(b)
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: %w", err)
+		return fmt.Errorf("format: DecodeVyLogBody: %w", err)
 	}
 
 	var record []byte
@@ -103,14 +121,14 @@ func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
 	for i := range entries {
 		key, n, err := readMPUint(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeVyLogBody: key %d: %w", i, err)
+			return fmt.Errorf("format: DecodeVyLogBody: key %d: %w", i, err)
 		}
 
 		off += n
 
 		valLen, err := skipMP(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeVyLogBody: skip value for key %d: %w", key, err)
+			return fmt.Errorf("format: DecodeVyLogBody: skip value for key %d: %w", key, err)
 		}
 
 		if iproto.Key(key) == iproto.IPROTO_TUPLE { //nolint:gosec // G115: msgpack body key is a small protocol number
@@ -121,57 +139,56 @@ func DecodeVyLogBody(b []byte) (*VyLogBody, error) {
 	}
 
 	if record == nil {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: %w: no IPROTO_TUPLE", ErrBadVyLogRecord)
+		return fmt.Errorf("format: DecodeVyLogBody: %w: no IPROTO_TUPLE", ErrBadVyLogRecord)
 	}
 
-	return decodeVyLogRecord(record)
+	return decodeVyLogRecord(record, dst)
 }
 
-// decodeVyLogRecord parses the [type, {key: value}] pair of a vinyl log record.
-func decodeVyLogRecord(b []byte) (*VyLogBody, error) {
+// decodeVyLogRecord parses the [type, {key: value}] pair of a vinyl log record
+// into body.
+func decodeVyLogRecord(b []byte, body *VyLogBody) error {
 	n, off, err := readMPArrayLen(b)
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: record: %w", err)
+		return fmt.Errorf("format: DecodeVyLogBody: record: %w", err)
 	}
 
 	if n != 2 { //nolint:mnd // A record is a pair of its type and its fields.
-		return nil, fmt.Errorf("format: DecodeVyLogBody: %w: an array of %d, not 2", ErrBadVyLogRecord, n)
+		return fmt.Errorf("format: DecodeVyLogBody: %w: an array of %d, not 2", ErrBadVyLogRecord, n)
 	}
 
 	typ, k, err := readMPUint(b[off:])
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: type: %w", err)
+		return fmt.Errorf("format: DecodeVyLogBody: type: %w", err)
 	}
 
 	off += k
 
 	entries, k, err := readMPMapLen(b[off:])
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeVyLogBody: fields: %w", err)
+		return fmt.Errorf("format: DecodeVyLogBody: fields: %w", err)
 	}
 
 	off += k
-	body := &VyLogBody{
-		Type: VyLogType(typ), //nolint:gosec // G115: vy_log record type is a small enum bounded by uint32
-		Keys: make(map[VyKey][]byte, entries),
-	}
+	body.Type = VyLogType(typ) //nolint:gosec // G115: vy_log record type is a small enum bounded by uint32
+	body.Keys = make(map[VyKey][]byte, entries)
 
 	for i := range entries {
 		key, n, err := readMPUint(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeVyLogBody: field %d: %w", i, err)
+			return fmt.Errorf("format: DecodeVyLogBody: field %d: %w", i, err)
 		}
 
 		off += n
 
 		valLen, err := skipMP(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeVyLogBody: skip value for field %d: %w", key, err)
+			return fmt.Errorf("format: DecodeVyLogBody: skip value for field %d: %w", key, err)
 		}
 
 		body.Keys[VyKey(key)] = b[off : off+valLen]
 		off += valLen
 	}
 
-	return body, nil
+	return nil
 }

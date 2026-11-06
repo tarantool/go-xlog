@@ -405,7 +405,9 @@ types — `Meta`, `XRow`, `VClock`, `Filetype` — and the encode/decode functio
 data changes (`DecodeDMLBody`), Raft and synchronous replication rows
 (`DecodeRaftBody`, `DecodeSynchroBody`), vinyl log records (`DecodeVyLogBody`)
 and the rows of vinyl run and index files (`DecodeVyStmtBody`,
-`DecodeVyRowIndexBody`, `DecodeVyRunInfoBody`, `DecodeVyPageInfoBody`). Request types and IPROTO
+`DecodeVyRowIndexBody`, `DecodeVyRunInfoBody`, `DecodeVyPageInfoBody`); each
+struct-returning decoder has an allocation-free `...Into` variant filling a
+caller-owned struct, like `DecodeXRowInto`. Request types and IPROTO
 header/body keys and flags come from `github.com/tarantool/go-iproto`
 (`iproto.IPROTO_*`). Use it directly if you need to work below the cursor level.
 

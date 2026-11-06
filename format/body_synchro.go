@@ -37,23 +37,45 @@ type SynchroBody struct {
 	Extras map[uint64][]byte
 }
 
-// DecodeSynchroBody parses a synchro body map at b[0:].
+// DecodeSynchroBody parses a synchro body map at b[0:]. It is
+// DecodeSynchroBodyInto into a new SynchroBody.
 func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
+	body := &SynchroBody{}
+
+	if err := DecodeSynchroBodyInto(b, body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// DecodeSynchroBodyInto parses a synchro body map at b[0:] into dst, the core
+// of DecodeSynchroBody. It first resets dst to the zero SynchroBody, so a dst
+// reused across rows carries no field of a prior row, then sets the fields of
+// the keys b holds. The values of Extras alias b. A map of a prior row is
+// never reused: a CONFIRM or ROLLBACK decodes with no allocation, but a
+// PROMOTE or DEMOTE with a vclock allocates a new ConfirmedVClock map, and a
+// key that has no field a new Extras map. VClockArray is the allocation-free
+// alternative to VClock; the body decoders do not fill one. On error dst
+// holds what was decoded before it.
+func DecodeSynchroBodyInto(b []byte, dst *SynchroBody) error {
+	*dst = SynchroBody{}
+
 	if len(b) == 0 {
-		return nil, fmt.Errorf("format: DecodeSynchroBody: %w", ErrEmptyBody)
+		return fmt.Errorf("format: DecodeSynchroBody: %w", ErrEmptyBody)
 	}
 
 	entries, off, err := readMPMapLen(b)
 	if err != nil {
-		return nil, fmt.Errorf("format: DecodeSynchroBody: %w", err)
+		return fmt.Errorf("format: DecodeSynchroBody: %w", err)
 	}
 
-	body := &SynchroBody{}
+	body := dst
 
 	for i := range entries {
 		key, n, err := readMPUint(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeSynchroBody: key %d: %w", i, err)
+			return fmt.Errorf("format: DecodeSynchroBody: key %d: %w", i, err)
 		}
 
 		off += n
@@ -61,7 +83,7 @@ func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
 
 		valLen, err := skipMP(b[off:])
 		if err != nil {
-			return nil, fmt.Errorf("format: DecodeSynchroBody: skip value for key %d: %w", key, err)
+			return fmt.Errorf("format: DecodeSynchroBody: skip value for key %d: %w", key, err)
 		}
 
 		val := b[valStart : valStart+valLen]
@@ -71,28 +93,28 @@ func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
 		case iproto.IPROTO_REPLICA_ID:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeSynchroBody: replica_id: %w", err)
+				return fmt.Errorf("format: DecodeSynchroBody: replica_id: %w", err)
 			}
 
 			body.ReplicaID = uint32(v) //nolint:gosec // G115: replica_id is a uint32 field per iproto_constants.h
 		case iproto.IPROTO_LSN:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeSynchroBody: lsn: %w", err)
+				return fmt.Errorf("format: DecodeSynchroBody: lsn: %w", err)
 			}
 
 			body.LSN = int64(v) //nolint:gosec // G115: lsn is a msgpack uint that fits int64 in the xlog format
 		case iproto.IPROTO_TERM:
 			v, _, err := readMPUint(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeSynchroBody: term: %w", err)
+				return fmt.Errorf("format: DecodeSynchroBody: term: %w", err)
 			}
 
 			body.Term = v
 		case iproto.IPROTO_VCLOCK:
 			vc, err := decodeVClockMap(val)
 			if err != nil {
-				return nil, fmt.Errorf("format: DecodeSynchroBody: vclock: %w", err)
+				return fmt.Errorf("format: DecodeSynchroBody: vclock: %w", err)
 			}
 
 			body.ConfirmedVClock = vc
@@ -105,5 +127,5 @@ func DecodeSynchroBody(b []byte) (*SynchroBody, error) {
 		}
 	}
 
-	return body, nil
+	return nil
 }
