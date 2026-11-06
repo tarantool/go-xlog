@@ -10,7 +10,12 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 
 ### Added
 
+- format: `VyLogType`, the type of a vinyl log record, with a constant and a
+  name for every record type of Tarantool.
+
 ### Changed
+
+- format: `VyLogBody.Type` is a `VyLogType` instead of a `uint32`.
 
 ### Fixed
 
@@ -19,6 +24,12 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   term zero. The confirmed vclock a PROMOTE/DEMOTE carries (`IPROTO_VCLOCK`,
   written by the limbo checkpoint of a snapshot) is decoded into the new
   `SynchroBody.ConfirmedVClock`.
+- format: `DecodeVyLogBody` decodes the record of a VYLOG row from the
+  `[type, {key: value}]` tuple under `IPROTO_TUPLE`, the shape Tarantool's
+  `vy_log_record_encode` writes. It used to read the body map itself as the
+  record, so every record decoded as type 0 (`CREATE_LSM`) with the whole
+  tuple as its only key; a body without the tuple is now an error
+  (`ErrBadVyLogRecord`).
 
 ## [v0.1.0] - 2026-07-23
 

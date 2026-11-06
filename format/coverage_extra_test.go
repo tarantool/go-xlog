@@ -388,57 +388,77 @@ func TestDecodeSynchroBody_Errors(t *testing.T) {
 func TestDecodeVyLogBody_Errors(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty", func(t *testing.T) {
-		t.Parallel()
+	tuple := func(record []byte) []byte {
+		return buildMap(1, kv(uint64(iproto.IPROTO_TUPLE), record))
+	}
 
-		_, err := format.DecodeVyLogBody(nil)
-		require.ErrorIs(t, err, format.ErrEmptyBody)
-	})
+	cases := []struct {
+		name string
+		raw  []byte
+		is   error
+	}{
+		{"empty", nil, format.ErrEmptyBody},
+		{"not a map", []byte{0x01}, nil},
+		{"bad key", []byte{0x81, 0xcc}, nil},
+		{"truncated value skip", append(mpFixmap(1), kv(0x10, []byte{0xdc, 0x00})...), nil},
+		{"no tuple", buildMap(1, kv(uint64(iproto.IPROTO_SPACE_ID), mpUint(1))), format.ErrBadVyLogRecord},
+		{"record not an array", tuple(mpUint(1)), nil},
+		{"record of one", tuple([]byte{0x91, 0x00}), format.ErrBadVyLogRecord},
+		{"bad type", tuple([]byte{0x92, 0xa1, 'x', 0x80}), nil},
+		{"fields not a map", tuple([]byte{0x92, 0x00, 0x90}), nil},
+		{"bad field key", tuple([]byte{0x92, 0x00, 0x81, 0xa1, 'x', 0x00}), nil},
+		{"truncated field value", tuple([]byte{0x92, 0x00, 0x81, 0x01, 0xdc, 0x00}), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	t.Run("not a map", func(t *testing.T) {
-		t.Parallel()
+			_, err := format.DecodeVyLogBody(tc.raw)
+			require.Error(t, err)
 
-		_, err := format.DecodeVyLogBody([]byte{0x01})
-		require.Error(t, err)
-	})
-
-	t.Run("bad key", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := format.DecodeVyLogBody([]byte{0x81, 0xcc})
-		require.Error(t, err)
-	})
-
-	t.Run("bad type value", func(t *testing.T) {
-		t.Parallel()
-
-		raw := buildMap(1, kv(uint64(iproto.IPROTO_REQUEST_TYPE), []byte{0xa1, 'x'}))
-		_, err := format.DecodeVyLogBody(raw)
-		require.Error(t, err)
-	})
-
-	t.Run("truncated value skip", func(t *testing.T) {
-		t.Parallel()
-
-		raw := append(mpFixmap(1), kv(0x10, []byte{0xdc, 0x00})...)
-		_, err := format.DecodeVyLogBody(raw)
-		require.Error(t, err)
-	})
+			if tc.is != nil {
+				require.ErrorIs(t, err, tc.is)
+			}
+		})
+	}
 }
 
 func TestDecodeVyLogBody_TypeAndKeys(t *testing.T) {
 	t.Parallel()
 
-	b := make([]byte, 0, 16)
+	// [VY_LOG_INSERT_SLICE, {range_id: 1, run_id: 2, slice_id: 3,
+	// begin: [1]}] as vy_log_record_encode writes it.
+	fields := make([]byte, 0, 16)
+	fields = append(fields, kv(uint64(format.VyKeyRangeID), mpUint(1))...)
+	fields = append(fields, kv(uint64(format.VyKeyRunID), mpUint(2))...)
+	fields = append(fields, kv(uint64(format.VyKeySliceID), mpUint(3))...)
+	fields = append(fields, kv(uint64(format.VyKeyBegin), []byte{0x91, 0x01})...)
+	record := append([]byte{0x92}, mpUint(uint64(format.VyLogInsertSlice))...)
+	record = append(record, buildMap(4, fields)...)
 
-	b = append(b, kv(uint64(iproto.IPROTO_REQUEST_TYPE), mpUint(9))...)
-	b = append(b, kv(0x10, []byte{0x91, 0x01})...)
+	b := make([]byte, 0, 32)
+	b = append(b, kv(0x55, []byte{0x01})...) // an unknown body key is ignored
+	b = append(b, kv(uint64(iproto.IPROTO_TUPLE), record)...)
 	raw := buildMap(2, b)
 
 	body, err := format.DecodeVyLogBody(raw)
 	require.NoError(t, err)
-	assert.Equal(t, uint32(9), body.Type)
-	require.Contains(t, body.Keys, format.VyKey(0x10))
+	assert.Equal(t, format.VyLogInsertSlice, body.Type)
+	assert.Equal(t, "INSERT_SLICE", body.Type.String())
+	assert.Equal(t, map[format.VyKey][]byte{
+		format.VyKeyRangeID: {0x01},
+		format.VyKeyRunID:   {0x02},
+		format.VyKeySliceID: {0x03},
+		format.VyKeyBegin:   {0x91, 0x01},
+	}, body.Keys)
+}
+
+func TestVyLogType_String(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "CREATE_LSM", format.VyLogCreateLSM.String())
+	assert.Equal(t, "ABORT_REBOOTSTRAP", format.VyLogAbortRebootstrap.String())
+	assert.Equal(t, "VyLogType(18)", format.VyLogType(18).String())
 }
 
 // ---------------------------------------------------------------------------

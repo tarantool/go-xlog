@@ -146,7 +146,7 @@ func FuzzDecodeSynchroBody(f *testing.F) {
 }
 
 func FuzzDecodeVyLogBody(f *testing.F) {
-	f.Add([]byte{0x81, 0x00, 0x01}) // {type:1}.
+	f.Add([]byte{0x81, 0x21, 0x92, 0x02, 0x81, 0x01, 0x01}) // {tuple: [INSERT_RANGE, {range_id: 1}]}.
 	f.Add([]byte{})
 	f.Fuzz(func(_ *testing.T, b []byte) {
 		_, _ = format.DecodeVyLogBody(b)

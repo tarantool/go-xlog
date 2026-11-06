@@ -157,7 +157,7 @@ func renderStorageBody(ft format.Filetype, body []byte) string {
 			keys[uint64(k)] = v
 		}
 
-		return fmt.Sprintf("vylog rectype=%d keys=%s", d.Type, renderU64Map(keys))
+		return fmt.Sprintf("vylog rectype=%s keys=%s", d.Type, renderU64Map(keys))
 	}
 
 	if len(body) == 0 {
