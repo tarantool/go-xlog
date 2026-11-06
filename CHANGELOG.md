@@ -15,6 +15,15 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
   `EncodeXRow` emits them iff non-zero, `IPROTO_SYNC` where Tarantool's
   `xrow_header_encode` writes it (right after the request type) and
   `IPROTO_SCHEMA_VERSION` right after it.
+- format: `XRow.Present`, a `Present` bitmask of the header keys a decoded row
+  carried on the wire, with a `Present*` constant per key and the accessors
+  `HasType`, `HasSync`, `HasReplicaID`, `HasLSN`, `HasTimestamp`,
+  `HasSchemaVersion`, `HasGroupID`, `HasTSN`, `HasFlags` and `HasStreamID`.
+  It tells an absent key from one present with the value 0: a replication
+  heartbeat is a row with `!HasLSN()`. The TSN and commit flag inferred for a
+  single-statement row set no bit. `Present` is decode-only: `EncodeXRow`
+  ignores it and still emits a key iff its field is non-zero, so a hand-built
+  row, whose `Present` is 0, encodes its whole header.
 - format: `VyLogType`, the type of a vinyl log record, with a constant and a
   name for every record type of Tarantool.
 - format: Typed decoders for the rows of vinyl `.run` and `.index` files:
@@ -40,9 +49,11 @@ Versioning](http://semver.org/spec/v2.0.0.html) except to the first release.
 ### Changed
 
 - format: `XRow` has new fields. A composite literal of `XRow` without field
-  names no longer compiles, and a row decoded from bytes that carry the new
-  keys no longer compares equal (`==`, `assert.Equal`, as a map key) to a
-  hand-built row that leaves them out.
+  names no longer compiles. A row decoded from bytes that carry the new keys
+  no longer compares equal (`==`, `assert.Equal`, as a map key) to a
+  hand-built row that leaves them out, and, as `DecodeXRowInto` fills in
+  `Present`, no decoded row compares equal to a hand-built one with the same
+  fields: compare with `Present` cleared, or set it on the expected row.
 - format: `VyLogBody.Type` is a `VyLogType` instead of a `uint32`.
 - dir: `OpenDir` and `OpenDirFS` refuse the `RUN` and `INDEX` filetypes with
   `ErrNotChain`: vinyl run files are named by run id and carry no vclock, so

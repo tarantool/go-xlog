@@ -61,6 +61,7 @@ func TestDecodeXRowInto_NoFieldBleed(t *testing.T) {
 	require.NotZero(t, dst.StreamID, "row A should set StreamID")
 	require.NotZero(t, dst.Sync, "row A should set Sync")
 	require.NotZero(t, dst.SchemaVersion, "row A should set SchemaVersion")
+	require.True(t, dst.HasStreamID(), "row A should carry IPROTO_STREAM_ID")
 
 	// Decode B into the SAME dst — its zero fields must come back zero.
 	_, err = format.DecodeXRowInto(encB, &dst)
@@ -74,6 +75,7 @@ func TestDecodeXRowInto_NoFieldBleed(t *testing.T) {
 	assert.Zero(t, dst.GroupID, "GroupID must not bleed from row A")
 	assert.Zero(t, dst.Sync, "Sync must not bleed from row A")
 	assert.Zero(t, dst.SchemaVersion, "SchemaVersion must not bleed from row A")
+	assert.Equal(t, format.PresentType|format.PresentLSN, dst.Present, "Present must not bleed from row A")
 }
 
 // TestXRow_ZeroAlloc is not parallel: AllocsPerRun counts the mallocs of the
@@ -96,6 +98,10 @@ func TestXRow_ZeroAlloc(t *testing.T) { //nolint:paralleltest // AllocsPerRun co
 		_, _ = format.DecodeXRowInto(enc, &dst)
 	})
 	assert.Zero(t, decAllocs, "DecodeXRowInto allocs")
+	assert.Equal(t, allPresent, dst.Present, "every key is on the wire")
+
+	dst.Present = 0
+
 	assert.Equal(t, *row, dst, "full row round-trips")
 }
 
